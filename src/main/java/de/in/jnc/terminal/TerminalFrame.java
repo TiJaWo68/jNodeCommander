@@ -25,51 +25,55 @@ import com.jediterm.terminal.ui.JediTermWidget;
  */
 public class TerminalFrame extends JFrame {
 
-    private static final Logger LOGGER = LogManager.getLogger(TerminalFrame.class);
+	private static final Logger LOGGER = LogManager.getLogger(TerminalFrame.class);
 
-    private static final int DEFAULT_COLUMNS = 80;
-    private static final int DEFAULT_ROWS = 24;
+	private static final int DEFAULT_COLUMNS = 80;
+	private static final int DEFAULT_ROWS = 24;
 
-    private final transient JediTermWidget terminalWidget;
-    private final transient SshConnection sshConnection;
-    private final transient TtyConnector ttyConnector;
+	private final transient JediTermWidget terminalWidget;
+	private final transient SshConnection sshConnection;
+	private final transient TtyConnector ttyConnector;
 
-    /**
-     * Creates a new terminal window and immediately starts the SSH connection.
-     *
-     * @param title         window title
-     * @param sshConnection the SSH connection to use (must not be connected yet)
-     */
-    public TerminalFrame(String title, SshConnection sshConnection) {
-        super(title);
+	/**
+	 * Creates a new terminal window and immediately starts the SSH connection.
+	 *
+	 * @param title         window title
+	 * @param sshConnection the SSH connection to use (must not be connected yet)
+	 * @param settings      the terminal appearance settings (colors, font, cursor)
+	 */
+	public TerminalFrame(String title, SshConnection sshConnection, TerminalSettings settings) {
+		super(title);
 
-        this.sshConnection = sshConnection;
+		this.sshConnection = sshConnection;
 
-        setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
-        setLayout(new BorderLayout());
-        setSize(800, 600);
-        setLocationRelativeTo(null);
+		setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+		setLayout(new BorderLayout());
+		setSize(800, 600);
+		setLocationRelativeTo(null);
 
-        // Create JediTerm widget with Solarized Dark theme
-        terminalWidget = new JediTermWidget(DEFAULT_COLUMNS, DEFAULT_ROWS,
-                new SolarizedDarkSettingsProvider());
+		// Create JediTerm widget with dynamic settings provider
+		terminalWidget = new JediTermWidget(DEFAULT_COLUMNS, DEFAULT_ROWS,
+				new DynamicSettingsProvider(settings));
 
-        add(terminalWidget, BorderLayout.CENTER);
+		add(terminalWidget, BorderLayout.CENTER);
 
-        // Create the TtyConnector bridge
-        ttyConnector = new SshTtyConnector(sshConnection);
+		// Create the TtyConnector bridge
+		ttyConnector = new SshTtyConnector(sshConnection);
 
-        // Wire up and start the terminal session
-        terminalWidget.setTtyConnector(ttyConnector);
+		// Wire up and start the terminal session
+		terminalWidget.setTtyConnector(ttyConnector);
 
-        // Clean up on window close
-        addWindowListener(new WindowAdapter() {
-            @Override
-            public void windowClosed(WindowEvent e) {
-                stopTerminal();
-            }
-        });
-    }
+		// Apply cursor shape from settings
+		terminalWidget.getTerminalPanel().setDefaultCursorShape(settings.getEffectiveCursorShape());
+
+		// Clean up on window close
+		addWindowListener(new WindowAdapter() {
+			@Override
+			public void windowClosed(WindowEvent e) {
+				stopTerminal();
+			}
+		});
+	}
 
     /**
      * Returns the JediTerm widget for programmatic access.

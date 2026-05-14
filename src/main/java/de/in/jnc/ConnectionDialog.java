@@ -28,6 +28,8 @@ import com.formdev.flatlaf.extras.FlatSVGIcon;
 
 import de.in.jnc.terminal.SshConnection;
 import de.in.jnc.terminal.TerminalFrame;
+import de.in.jnc.terminal.TerminalSettings;
+import de.in.jnc.terminal.TerminalSettingsPanel;
 
 /**
  * Dialog for entering SSH connection details.
@@ -43,6 +45,7 @@ public class ConnectionDialog extends JDialog {
 	private final JTextField keyField = new JTextField();
 	private final JButton connectBtn = new JButton("Connect");
 	private final JButton saveBtn = new JButton(); // Floppy button
+	private JButton termSettingsBtn; // Terminal settings gear button, initialized in initUI
 
 	private String loadedProfileId = null;
 
@@ -138,6 +141,11 @@ public class ConnectionDialog extends JDialog {
 		saveBtn.setToolTipText("Save Profile");
 		saveBtn.addActionListener(e -> promptSaveProfile(false));
 
+		// Terminal settings gear button with gear icon
+		termSettingsBtn = new JButton(new FlatSVGIcon("gear.svg", 16, 16));
+		termSettingsBtn.setToolTipText("Terminal Settings for this Profile");
+		termSettingsBtn.addActionListener(e -> onTerminalSettings());
+
 		Composite buttonComposite = new Composite();
 		buttonComposite.defaults().space(10);
 		JButton cancelBtn = new JButton("Cancel");
@@ -145,9 +153,15 @@ public class ConnectionDialog extends JDialog {
 		connectBtn.addActionListener(e -> onConnect());
 		cancelBtn.addActionListener(e -> dispose());
 
-		// Add Save btn to the left, Connect/Cancel to the right
-		composite.addCell(saveBtn).align(Cell.LEFT);
-		
+		// Left side: Save + gear buttons packed together
+		javax.swing.JPanel leftButtonPanel = new javax.swing.JPanel(
+				new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 5, 0));
+		leftButtonPanel.setOpaque(false);
+		leftButtonPanel.add(saveBtn);
+		leftButtonPanel.add(termSettingsBtn);
+		composite.addCell(leftButtonPanel).align(Cell.LEFT);
+
+		// Right side: Connect + Cancel
 		buttonComposite.addCell(connectBtn).prefWidth(110);
 		buttonComposite.addCell(cancelBtn).prefWidth(110);
 		composite.addCell(buttonComposite).align(Cell.RIGHT);
@@ -249,6 +263,73 @@ public class ConnectionDialog extends JDialog {
 		}
 	}
 
+	/**
+	 * Opens a modal dialog for editing per-profile terminal settings.
+	 * The dialog shows a {@link TerminalSettingsPanel} in per-profile mode,
+	 * allowing the user to override global terminal settings for this connection.
+	 */
+	private void onTerminalSettings() {
+		String profileName = (loadedProfileId != null) ? getLoadedProfileName() : "New Connection";
+		JDialog dialog = new JDialog(this, "Terminal Settings \u2013 " + profileName, true);
+		dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+		dialog.setLayout(new BorderLayout());
+		dialog.setSize(450, 350);
+		dialog.setLocationRelativeTo(this);
+		dialog.setIconImage(new FlatSVGIcon("gear.svg", 32, 32).getImage());
+
+		TerminalSettingsPanel settingsPanel = new TerminalSettingsPanel(true);
+
+		// If a profile is loaded and has an override, pre-populate the panel
+		if (loadedProfileId != null) {
+			ProfileManager.getInstance().getProfiles().stream()
+				.filter(p -> p.getId().equals(loadedProfileId))
+				.findFirst()
+				.ifPresent(p -> {
+					if (p.getTerminalSettingsOverride() != null) {
+						settingsPanel.setSettings(p.getTerminalSettingsOverride());
+					}
+				});
+		}
+
+		dialog.add(settingsPanel, BorderLayout.CENTER);
+
+		// Button panel
+		JPanel buttonPanel = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT, 10, 5));
+		JButton saveBtn = new JButton("Save");
+		JButton cancelBtn = new JButton("Cancel");
+
+		saveBtn.addActionListener(e -> {
+			TerminalSettings settings = settingsPanel.getSettings();
+			if (loadedProfileId != null) {
+				ProfileManager.getInstance().getProfiles().stream()
+					.filter(p -> p.getId().equals(loadedProfileId))
+					.findFirst()
+					.ifPresent(p -> {
+						p.setTerminalSettingsOverride(settings);
+						ProfileManager.getInstance().addOrUpdateProfile(p);
+						LOGGER.info("Per-profile terminal settings saved for profile '{}'", p.getName());
+					});
+			}
+			dialog.dispose();
+		});
+
+		cancelBtn.addActionListener(e -> dialog.dispose());
+
+		buttonPanel.add(saveBtn);
+		buttonPanel.add(cancelBtn);
+		dialog.add(buttonPanel, BorderLayout.SOUTH);
+
+		dialog.setVisible(true);
+	}
+
+	private String getLoadedProfileName() {
+		return ProfileManager.getInstance().getProfiles().stream()
+			.filter(p -> p.getId().equals(loadedProfileId))
+			.findFirst()
+			.map(ConnectionProfile::getName)
+			.orElse("Unknown");
+	}
+
 	private void onConnect() {
 		if (loadedProfileId == null) {
 			promptSaveProfile(true);
@@ -274,6 +355,9 @@ public class ConnectionDialog extends JDialog {
 		connectBtn.setEnabled(false);
 		connectBtn.setText("Connecting...");
 
+		// Resolve terminal settings: check per-profile override, fall back to global
+		final TerminalSettings termSettings = resolveTerminalSettings();
+
 		SwingWorker<TerminalFrame, Void> worker = new SwingWorker<>() {
 			@Override
 			protected TerminalFrame doInBackground() throws Exception {
@@ -288,7 +372,7 @@ public class ConnectionDialog extends JDialog {
 
 				// Create TerminalFrame (Swing constructor must be on EDT)
 				TerminalFrame terminalFrame = new TerminalFrame(
-						user + "@" + host, sshConnection);
+						user + "@" + host, sshConnection, termSettings);
 				return terminalFrame;
 			}
 
@@ -301,6 +385,7 @@ public class ConnectionDialog extends JDialog {
 					SwingUtilities.invokeLater(() -> {
 						terminalFrame.getTerminalWidget().start();
 						terminalFrame.setVisible(true);
+						ConnectionDialog.this.dispose();
 						LOGGER.info("Terminal window opened for {}", terminalFrame.getSshConnection());
 					});
 
@@ -320,5 +405,16 @@ public class ConnectionDialog extends JDialog {
 			}
 		};
 		worker.execute();
+	}
+
+	private TerminalSettings resolveTerminalSettings() {
+		if (loadedProfileId != null) {
+			return ProfileManager.getInstance().getProfiles().stream()
+				.filter(p -> p.getId().equals(loadedProfileId))
+				.findFirst()
+				.map(ConnectionProfile::resolveTerminalSettings)
+				.orElse(GlobalSettings.getInstance().getTerminalSettings());
+		}
+		return GlobalSettings.getInstance().getTerminalSettings();
 	}
 }

@@ -3,6 +3,8 @@ package de.in.jnc;
 import java.util.Objects;
 import java.util.UUID;
 
+import de.in.jnc.terminal.TerminalSettings;
+
 /**
  * Represents a saved SSH connection profile.
  */
@@ -16,6 +18,12 @@ public class ConnectionProfile {
 	private String encryptedPassword;
 	private String keyFilePath;
 	private long lastUsed;
+
+	/**
+	 * Optional per-profile terminal settings override.
+	 * If null, the global terminal settings from {@link GlobalSettings} are used.
+	 */
+	private TerminalSettings terminalSettingsOverride;
 
 	public ConnectionProfile() {
 		// Required for Jackson deserialization
@@ -84,6 +92,39 @@ public class ConnectionProfile {
 
 	public void setLastUsed(long lastUsed) {
 		this.lastUsed = lastUsed;
+	}
+
+	/**
+	 * Returns the per-profile terminal settings override, if set.
+	 *
+	 * @return the terminal settings override, or null
+	 */
+	public TerminalSettings getTerminalSettingsOverride() {
+		return terminalSettingsOverride;
+	}
+
+	/**
+	 * Sets a per-profile override for terminal settings.
+	 *
+	 * @param terminalSettingsOverride the settings to use for this profile, or null to use global defaults
+	 */
+	public void setTerminalSettingsOverride(TerminalSettings terminalSettingsOverride) {
+		this.terminalSettingsOverride = terminalSettingsOverride;
+	}
+
+	/**
+	 * Resolves the effective terminal settings for this profile.
+	 * <p>
+	 * If a per-profile override exists, it is returned.
+	 * Otherwise, the global default settings from {@link GlobalSettings} are used.
+	 *
+	 * @return the effective TerminalSettings to use when connecting
+	 */
+	public TerminalSettings resolveTerminalSettings() {
+		if (terminalSettingsOverride != null) {
+			return terminalSettingsOverride;
+		}
+		return GlobalSettings.getInstance().getTerminalSettings();
 	}
 
 	@Override

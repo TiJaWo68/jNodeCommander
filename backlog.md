@@ -37,7 +37,7 @@ This document outlines the development phases structured as Epics and User Stori
   * Integrate JediTerm as terminal emulator (Git submodule + local Maven build).
   * Implement TtyConnector bridge for SSHJ shell channels.
   * Provide Solarized Dark as default color scheme.
-* [ ] **Story 3.1a: Configurable Terminal Options**
+* [x] **Story 3.1a: Configurable Terminal Options**
   * Make terminal color scheme configurable (Solarized Dark, Default, custom).
   * Make font family and font size configurable.
   * Make cursor style and blinking configurable.

@@ -62,6 +62,16 @@ public class TrayManager {
 		popup.add(connectionMenu);
 		popup.addSeparator();
 
+		MenuItem settingsItem = new MenuItem("Settings...");
+		settingsItem.addActionListener(e -> {
+			LOGGER.info("Opening Settings dialog.");
+			SwingUtilities.invokeLater(() -> {
+				new SettingsFrame().setVisible(true);
+			});
+		});
+		popup.add(settingsItem);
+		popup.addSeparator();
+
 		MenuItem exitItem = new MenuItem("Exit");
 		exitItem.addActionListener(e -> {
 			LOGGER.info("Exiting application via Tray menu.");
