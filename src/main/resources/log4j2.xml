@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN">
+    <Properties>
+        <Property name="logDir">${sys:jnc.logDir:-log}</Property>
+    </Properties>
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
+        </Console>
+        
+        <RollingFile name="FileAppender" 
+                     fileName="${logDir}/jnc.log"
+                     filePattern="${logDir}/archive/jnc-%d{yyyy-MM-dd}-%i.log.zip">
+            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
+            <Policies>
+                <!-- Create a new log file on every application start -->
+                <OnStartupTriggeringPolicy />
+                <!-- Also roll if the file gets too large (safety measure) -->
+                <SizeBasedTriggeringPolicy size="10 MB" />
+            </Policies>
+            <DefaultRolloverStrategy>
+                <!-- Retain logs for the last 10 days -->
+                <Delete basePath="${logDir}/archive" maxDepth="1">
+                    <IfFileName glob="jnc-*.log.zip" />
+                    <IfLastModified age="10d" />
+                </Delete>
+            </DefaultRolloverStrategy>
+        </RollingFile>
+    </Appenders>
+    
+    <Loggers>
+        <Root level="info">
+            <AppenderRef ref="FileAppender"/>
+        </Root>
+        <!-- SSHJ Logs -->
+        <Logger name="net.schmizz.sshj" level="info" additivity="false">
+            <AppenderRef ref="FileAppender"/>
+        </Logger>
+    </Loggers>
+</Configuration>
