@@ -31,9 +31,17 @@ This document outlines the development phases structured as Epics and User Stori
 ## Epic 3: The Three Pillars (Tools Integration)
 **Goal:** Provide the core administrative interfaces within a node's window.
 
-* [ ] **Story 3.1: The Native Terminal ("PuTTY" alternative)**
+* [x] **Story 3.1: The Native Terminal ("PuTTY" alternative)**
   * Create a Swing panel that connects to a shell channel via SSHJ.
   * Bind standard input/output to the UI to execute manual commands.
+  * Integrate JediTerm as terminal emulator (Git submodule + local Maven build).
+  * Implement TtyConnector bridge for SSHJ shell channels.
+  * Provide Solarized Dark as default color scheme.
+* [ ] **Story 3.1a: Configurable Terminal Options**
+  * Make terminal color scheme configurable (Solarized Dark, Default, custom).
+  * Make font family and font size configurable.
+  * Make cursor style and blinking configurable.
+  * Provide a settings UI or extend the existing connection dialog.
 * [ ] **Story 3.2: File Transfer Interface ("WinSCP" alternative)**
   * Build a rudimentary UI panel showing remote files.
   * Implement upload/download logic using SSHJ's SCP/SFTP capabilities.

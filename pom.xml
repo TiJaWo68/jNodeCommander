@@ -31,6 +31,17 @@
 			<artifactId>sshj</artifactId>
 			<version>0.38.0</version>
 		</dependency>
+		<!-- JediTerm Terminal Emulator (Apache 2.0 / LGPLv3) — built from Git submodule libs/jediterm -->
+		<dependency>
+			<groupId>org.jetbrains.jediterm</groupId>
+			<artifactId>jediterm-core</artifactId>
+			<version>3.66-SNAPSHOT</version>
+		</dependency>
+		<dependency>
+			<groupId>org.jetbrains.jediterm</groupId>
+			<artifactId>jediterm-ui</artifactId>
+			<version>3.66-SNAPSHOT</version>
+		</dependency>
 		<dependency>
 			<groupId>me.friwi</groupId>
 			<artifactId>jcefmaven</artifactId>
@@ -67,14 +78,26 @@
 			<version>5.10.2</version>
 			<scope>test</scope>
 		</dependency>
+		<dependency>
+			<groupId>org.mockito</groupId>
+			<artifactId>mockito-core</artifactId>
+			<version>5.23.0</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.mockito</groupId>
+			<artifactId>mockito-junit-jupiter</artifactId>
+			<version>5.23.0</version>
+			<scope>test</scope>
+		</dependency>
 	</dependencies>
 	<build>
 		<plugins>
 			<plugin>
 				<artifactId>maven-compiler-plugin</artifactId>
-				<version>3.13.0</version>
+				<version>3.14.0</version>
 				<configuration>
-					<release>25</release>
+					<release>21</release>
 				</configuration>
 			</plugin>
 			<plugin>

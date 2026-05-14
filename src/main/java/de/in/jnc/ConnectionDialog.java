@@ -1,7 +1,6 @@
 package de.in.jnc;
 
 import java.awt.BorderLayout;
-import java.awt.Font;
 import java.io.File;
 
 import javax.swing.JButton;
@@ -14,6 +13,8 @@ import javax.swing.JPasswordField;
 import javax.swing.JSpinner;
 import javax.swing.JTextField;
 import javax.swing.SpinnerNumberModel;
+import javax.swing.SwingUtilities;
+import javax.swing.SwingWorker;
 import javax.swing.UIManager;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
@@ -24,6 +25,9 @@ import org.cuberact.swing.layout.Cell;
 import org.cuberact.swing.layout.Composite;
 
 import com.formdev.flatlaf.extras.FlatSVGIcon;
+
+import de.in.jnc.terminal.SshConnection;
+import de.in.jnc.terminal.TerminalFrame;
 
 /**
  * Dialog for entering SSH connection details.
@@ -257,8 +261,64 @@ public class ConnectionDialog extends JDialog {
 					ProfileManager.getInstance().addOrUpdateProfile(p);
 				});
 		}
-		
-		LOGGER.info("Connection requested: {}@{}:{}", userField.getText(), hostField.getText(), portSpinner.getValue());
-		dispose();
+
+		final String host = hostField.getText().trim();
+		final int port = (Integer) portSpinner.getValue();
+		final String user = userField.getText().trim();
+		final String password = new String(passwordField.getPassword());
+		final String keyFilePath = keyField.getText().trim();
+
+		LOGGER.info("Connection requested: {}@{}:{}", user, host, port);
+
+		// Disable the dialog to prevent double-click
+		connectBtn.setEnabled(false);
+		connectBtn.setText("Connecting...");
+
+		SwingWorker<TerminalFrame, Void> worker = new SwingWorker<>() {
+			@Override
+			protected TerminalFrame doInBackground() throws Exception {
+				SshConnection sshConnection = new SshConnection(
+						host, port, user,
+						password.isEmpty() ? null : password,
+						keyFilePath.isEmpty() ? null : keyFilePath);
+
+				// Blocking I/O on background thread
+				sshConnection.connect();
+				LOGGER.info("SSH connection established, creating terminal UI");
+
+				// Create TerminalFrame (Swing constructor must be on EDT)
+				TerminalFrame terminalFrame = new TerminalFrame(
+						user + "@" + host, sshConnection);
+				return terminalFrame;
+			}
+
+			@Override
+			protected void done() {
+				try {
+					TerminalFrame terminalFrame = get(); // re-throws any exception from doInBackground
+
+					// Start JediTerm and show window on the EDT
+					SwingUtilities.invokeLater(() -> {
+						terminalFrame.getTerminalWidget().start();
+						terminalFrame.setVisible(true);
+						LOGGER.info("Terminal window opened for {}", terminalFrame.getSshConnection());
+					});
+
+				} catch (Exception e) {
+					LOGGER.error("Failed to establish SSH connection: {}", e.getMessage());
+					// Show error dialog on the EDT
+					SwingUtilities.invokeLater(() ->
+							JOptionPane.showMessageDialog(ConnectionDialog.this,
+									"Connection failed:\n" + e.getMessage(),
+									"SSH Error",
+									JOptionPane.ERROR_MESSAGE));
+				} finally {
+					// Re-enable dialog so user can retry
+					connectBtn.setEnabled(true);
+					connectBtn.setText("Connect");
+				}
+			}
+		};
+		worker.execute();
 	}
 }
