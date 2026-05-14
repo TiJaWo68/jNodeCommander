@@ -2,6 +2,7 @@ package de.in.jnc;
 
 import java.awt.BorderLayout;
 import java.io.File;
+import java.io.IOException;
 
 import javax.swing.JButton;
 import javax.swing.JDialog;
@@ -26,8 +27,8 @@ import org.cuberact.swing.layout.Composite;
 
 import com.formdev.flatlaf.extras.FlatSVGIcon;
 
+import de.in.jnc.connection.ConnectionFrame;
 import de.in.jnc.terminal.SshConnection;
-import de.in.jnc.terminal.TerminalFrame;
 import de.in.jnc.terminal.TerminalSettings;
 import de.in.jnc.terminal.TerminalSettingsPanel;
 
@@ -358,9 +359,9 @@ public class ConnectionDialog extends JDialog {
 		// Resolve terminal settings: check per-profile override, fall back to global
 		final TerminalSettings termSettings = resolveTerminalSettings();
 
-		SwingWorker<TerminalFrame, Void> worker = new SwingWorker<>() {
+		SwingWorker<ConnectionFrame, Void> worker = new SwingWorker<>() {
 			@Override
-			protected TerminalFrame doInBackground() throws Exception {
+			protected ConnectionFrame doInBackground() throws Exception {
 				SshConnection sshConnection = new SshConnection(
 						host, port, user,
 						password.isEmpty() ? null : password,
@@ -368,25 +369,25 @@ public class ConnectionDialog extends JDialog {
 
 				// Blocking I/O on background thread
 				sshConnection.connect();
-				LOGGER.info("SSH connection established, creating terminal UI");
+				LOGGER.info("SSH connection established, creating ConnectionFrame");
 
-				// Create TerminalFrame (Swing constructor must be on EDT)
-				TerminalFrame terminalFrame = new TerminalFrame(
+				// Create ConnectionFrame (may throw IOException from SFTP channel)
+				ConnectionFrame connectionFrame = new ConnectionFrame(
 						user + "@" + host, sshConnection, termSettings);
-				return terminalFrame;
+				return connectionFrame;
 			}
 
 			@Override
 			protected void done() {
 				try {
-					TerminalFrame terminalFrame = get(); // re-throws any exception from doInBackground
+					ConnectionFrame connectionFrame = get(); // re-throws any exception from doInBackground
 
 					// Start JediTerm and show window on the EDT
 					SwingUtilities.invokeLater(() -> {
-						terminalFrame.getTerminalWidget().start();
-						terminalFrame.setVisible(true);
+						connectionFrame.startTerminal();
+						connectionFrame.setVisible(true);
 						ConnectionDialog.this.dispose();
-						LOGGER.info("Terminal window opened for {}", terminalFrame.getSshConnection());
+						LOGGER.info("ConnectionFrame opened for {}", connectionFrame.getSshConnection());
 					});
 
 				} catch (Exception e) {

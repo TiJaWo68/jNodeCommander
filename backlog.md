@@ -42,9 +42,10 @@ This document outlines the development phases structured as Epics and User Stori
   * Make font family and font size configurable.
   * Make cursor style and blinking configurable.
   * Provide a settings UI or extend the existing connection dialog.
-* [ ] **Story 3.2: File Transfer Interface ("WinSCP" alternative)**
-  * Build a rudimentary UI panel showing remote files.
-  * Implement upload/download logic using SSHJ's SCP/SFTP capabilities.
+* [x] **Story 3.2: File Transfer Interface ("WinSCP" alternative)**
+  * Build a ConnectionFrame with JTabbedPane (Terminal + File Transfer pinned tabs).
+  * Implement dual-pane file transfer (left: local, right: remote) via SFTP (SSHJ).
+  * Support Copy (both directions), Delete, Rename, MkDir file operations.
 * [ ] **Story 3.3: Basic Browser Integration**
   * Embed a JCEF browser instance within a Swing container.
   * Ensure the browser correctly renders a standard test webpage.

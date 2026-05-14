@@ -14,6 +14,7 @@ import org.apache.logging.log4j.Logger;
 import net.schmizz.sshj.SSHClient;
 import net.schmizz.sshj.connection.channel.direct.Session;
 import net.schmizz.sshj.connection.channel.direct.Session.Shell;
+import net.schmizz.sshj.sftp.SFTPClient;
 import net.schmizz.sshj.transport.verification.PromiscuousVerifier;
 import net.schmizz.sshj.userauth.keyprovider.FileKeyProvider;
 import net.schmizz.sshj.userauth.keyprovider.OpenSSHKeyFile;
@@ -161,6 +162,23 @@ public class SshConnection implements Closeable {
     public OutputStream getOutputStream() {
         checkConnected();
         return shellOutputStream;
+    }
+
+    /**
+     * Opens a new SFTP channel on the existing SSH connection.
+     * <p>
+     * The returned {@link SFTPClient} can be used for file transfer operations
+     * (list, upload, download, delete, rename, mkdir) while the shell session
+     * remains active in parallel.
+     *
+     * @return a new SFTPClient instance
+     * @throws IOException if the SFTP subsystem could not be opened
+     * @throws IllegalStateException if not connected
+     */
+    public SFTPClient getSFTPClient() throws IOException {
+        checkConnected();
+        LOGGER.debug("Opening SFTP channel on {}", this);
+        return sshClient.newSFTPClient();
     }
 
     /**
