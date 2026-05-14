@@ -18,13 +18,13 @@ This document outlines the development phases structured as Epics and User Stori
 ## Epic 2: The Command Center (Tray & Profiles)
 **Goal:** Build the central entry point and connection management.
 
-* [ ] **Story 2.1: System Tray Integration**
+* [x] **Story 2.1: System Tray Integration**
   * Implement a native Windows System Tray icon using AWT/Swing.
-  * Add a basic context menu (Exit, Add Connection).
+  * Add a basic context menu (Exit, Connection->new,<alle gespeicherten connections/profiles>).
   * Ensure the application stays alive in the background when no windows are open.
-* [ ] **Story 2.2: "Connect to Host" Dialog**
+* [x] **Story 2.2: "Connect to Host" Dialog**
   * Build a Swing UI dialog to input Host, Username, Port, and Password/Key.
-* [ ] **Story 2.3: Profile Persistence**
+* [x] **Story 2.3: Profile Persistence**
   * Implement logic to save and load connection profiles to/from the local disk.
   * Implement basic AES-256 encryption for saved passwords (Test Scope).
 

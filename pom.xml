@@ -10,28 +10,32 @@
 	<description>Automated SSH and Web-Login Bridge for K8s Nodes</description>
 
 	<dependencies>
-		<!-- Source: https://mvnrepository.com/artifact/com.formdev/flatlaf -->
 		<dependency>
 			<groupId>com.formdev</groupId>
 			<artifactId>flatlaf</artifactId>
 			<version>3.7.1</version>
 		</dependency>
-
-		<!-- SSH Connectivity (Story 1.1) -->
+		<dependency>
+			<groupId>com.formdev</groupId>
+			<artifactId>flatlaf-extras</artifactId>
+			<version>3.7.1</version>
+		</dependency>
+		<!-- Cuberact Swing Layout (Epic 2) -->
+		<dependency>
+			<groupId>org.cuberact</groupId>
+			<artifactId>cuberact-swing-layout</artifactId>
+			<version>1.1.1</version>
+		</dependency>
 		<dependency>
 			<groupId>com.hierynomus</groupId>
 			<artifactId>sshj</artifactId>
 			<version>0.38.0</version>
 		</dependency>
-
-		<!-- Embedded Browser (Story 1.1) -->
 		<dependency>
 			<groupId>me.friwi</groupId>
 			<artifactId>jcefmaven</artifactId>
 			<version>146.0.10</version>
 		</dependency>
-
-		<!-- Logging: Log4j2 (Story 1.1) -->
 		<dependency>
 			<groupId>org.apache.logging.log4j</groupId>
 			<artifactId>log4j-api</artifactId>
@@ -42,18 +46,26 @@
 			<artifactId>log4j-core</artifactId>
 			<version>2.23.1</version>
 		</dependency>
-		<!-- SLF4J Bridge for SSHJ -->
 		<dependency>
 			<groupId>org.apache.logging.log4j</groupId>
 			<artifactId>log4j-slf4j2-impl</artifactId>
 			<version>2.23.1</version>
 		</dependency>
-		
-		<!-- StringUtils for Log4jTools -->
 		<dependency>
 			<groupId>org.apache.commons</groupId>
 			<artifactId>commons-lang3</artifactId>
 			<version>3.14.0</version>
+		</dependency>
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-databind</artifactId>
+			<version>2.16.1</version>
+		</dependency>
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter-engine</artifactId>
+			<version>5.10.2</version>
+			<scope>test</scope>
 		</dependency>
 	</dependencies>
 	<build>
@@ -65,7 +77,6 @@
 					<release>25</release>
 				</configuration>
 			</plugin>
-			<!-- Suppress native access warnings during tests -->
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-surefire-plugin</artifactId>
@@ -74,7 +85,6 @@
 					<argLine>--enable-native-access=ALL-UNNAMED</argLine>
 				</configuration>
 			</plugin>
-			<!-- Configuration for running the app via mvn exec:java -->
 			<plugin>
 				<groupId>org.codehaus.mojo</groupId>
 				<artifactId>exec-maven-plugin</artifactId>
