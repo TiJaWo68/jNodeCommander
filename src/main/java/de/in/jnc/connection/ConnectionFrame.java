@@ -8,8 +8,12 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.IOException;
 
+import javax.swing.Box;
+import javax.swing.JButton;
 import javax.swing.JFrame;
+import javax.swing.JPanel;
 import javax.swing.JTabbedPane;
+import javax.swing.JToolBar;
 import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
 
@@ -22,6 +26,7 @@ import com.jediterm.terminal.ui.JediTermWidget;
 
 import de.in.jnc.ConnectionProfile;
 import de.in.jnc.ProfileManager;
+import de.in.jnc.connection.browser.BrowserTabManager;
 import de.in.jnc.connection.filetransfer.FileTransferPanel;
 import de.in.jnc.connection.filetransfer.SftpService;
 import de.in.jnc.terminal.DynamicSettingsProvider;
@@ -39,6 +44,7 @@ import de.in.jnc.terminal.TerminalSettings;
  * <ul>
  *   <li>Tab 0: Terminal (pinned, non-closable) — {@link JediTermWidget}</li>
  *   <li>Tab 1: File Transfer (pinned, non-closable) — {@link FileTransferPanel}</li>
+ *   <li>Tab 2+: Browser tabs (dynamic, closable) — managed by {@link BrowserTabManager}</li>
  * </ul>
  */
 public class ConnectionFrame extends JFrame {
@@ -57,6 +63,7 @@ public class ConnectionFrame extends JFrame {
     private final transient TtyConnector ttyConnector;
     private final transient SftpService sftpService;
     private final FileTransferPanel fileTransferPanel;
+    private final BrowserTabManager browserTabManager;
 
     /**
      * Creates a new ConnectionFrame with the given SSH connection.
@@ -120,7 +127,25 @@ public class ConnectionFrame extends JFrame {
         FlatSVGIcon folderIcon = new FlatSVGIcon("folder.svg", 16, 16);
         tabbedPane.addTab("File Transfer", folderIcon, fileTransferPanel, "SFTP File Transfer");
 
-        add(tabbedPane, BorderLayout.CENTER);
+        // ── Browser Tab Manager ──────────────────────────────────────────
+        browserTabManager = new BrowserTabManager(tabbedPane);
+
+        // ── "+" Button zum Öffnen eines neuen Browser-Tabs ──────────────
+        JButton addTabBtn = new JButton("+");
+        addTabBtn.setToolTipText("New Browser Tab");
+        addTabBtn.addActionListener(e -> openNewBrowserTab());
+
+        // Platzieren rechts oberhalb der Tab-Leiste
+        JToolBar tabToolbar = new JToolBar();
+        tabToolbar.setFloatable(false);
+        tabToolbar.setBorderPainted(false);
+        tabToolbar.add(Box.createHorizontalGlue());
+        tabToolbar.add(addTabBtn);
+
+        JPanel centerPanel = new JPanel(new BorderLayout());
+        centerPanel.add(tabToolbar, BorderLayout.NORTH);
+        centerPanel.add(tabbedPane, BorderLayout.CENTER);
+        add(centerPanel, BorderLayout.CENTER);
 
         // Clean up on window close
         addWindowListener(new WindowAdapter() {
@@ -145,6 +170,9 @@ public class ConnectionFrame extends JFrame {
      */
     private void closeConnection() {
         LOGGER.info("Closing ConnectionFrame for {}", sshConnection);
+
+        // Close all browser tabs and release JCEF resources
+        browserTabManager.closeAll();
 
         // Save current state into the profile before closing
         if (profile != null) {
@@ -190,6 +218,33 @@ public class ConnectionFrame extends JFrame {
             }
         }
         return false;
+    }
+
+    /**
+     * Opens the given URL in a browser tab.
+     * <p>
+     * Delegates to {@link BrowserTabManager#openUrl(String, String)}. Intended
+     * to be called from the Web Apps popup menu (Story 3.3.2) or programmatically.
+     *
+     * @param url         the URL to open
+     * @param displayName initial tab label
+     */
+    public void openBrowserUrl(String url, String displayName) {
+        browserTabManager.openUrl(url, displayName);
+    }
+
+    /**
+     * Opens a fresh empty browser tab.
+     */
+    public void openNewBrowserTab() {
+        browserTabManager.openNewTab();
+    }
+
+    /**
+     * Returns the {@link BrowserTabManager} for external access (e.g. Web Apps button).
+     */
+    public BrowserTabManager getBrowserTabManager() {
+        return browserTabManager;
     }
 
     // ─── Getters ──────────────────────────────────────────────────────────

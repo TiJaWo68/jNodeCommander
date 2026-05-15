@@ -46,9 +46,21 @@ This document outlines the development phases structured as Epics and User Stori
   * Build a ConnectionFrame with JTabbedPane (Terminal + File Transfer pinned tabs).
   * Implement dual-pane file transfer (left: local, right: remote) via SFTP (SSHJ).
   * Support Copy (both directions), Delete, Rename, MkDir file operations.
-* [ ] **Story 3.3: Basic Browser Integration**
-  * Embed a JCEF browser instance within a Swing container.
-  * Ensure the browser correctly renders a standard test webpage.
+* [ ] **Story 3.3.1: Browser Tab (JCEF)**
+  * Embed a JCEF browser instance as a closable dynamic tab within ConnectionFrame.
+  * Add URL navigation bar (back, forward, refresh, address field).
+  * Implement tab management: existing URL → select tab, new URL → create tab.
+  * Provide "New Browser Tab" entry for manual URL entry.
+  * Prepare for JS-injection capability (required for Epic 4).
+* [ ] **Story 3.3.2: URL + Service Discovery (Web Apps Menu)**
+  * Add `executeCommand()` to SshConnection for running shell commands in a separate channel.
+  * Implement kubectl-based service discovery (`kubectl get svc --all-namespaces`) via SSH.
+  * Classify endpoints by access type: NodePort (direct), ClusterIP (tunnel required), Ingress.
+  * Build a "🔗 Web Apps" button in the ConnectionFrame tab bar with a grouped popup menu.
+  * Implement automatic view switching: 1-2 namespaces → flat, 3+ → grouped by namespace.
+  * Add toggle switch to manually switch between flat and grouped views.
+  * Implement `kubectl port-forward` tunnel management for ClusterIP services.
+  * Clean up all tunnels on connection close.
 
 ## Epic 4: Automation Core (The JLock Magic)
 **Goal:** Automate credential retrieval and application login.
