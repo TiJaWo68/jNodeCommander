@@ -243,6 +243,35 @@ public class SshConnection implements Closeable {
     }
 
     /**
+     * Executes a command and returns the output even if the remote process
+     * exits with a non-zero status. This is useful for commands like
+     * {@code show_credentials} that write useful data to stdout but use a
+     * non-zero exit code as a usage signal rather than a true failure.
+     * <p>
+     * The command runs without {@code sudo}. For sudo commands, use
+     * {@link #executeCommand(String, boolean)} which enforces exit code checking.
+     *
+     * @param command the shell command to execute
+     * @return the trimmed stdout of the command (even on non-zero exit)
+     * @throws IOException if the command channel cannot be opened
+     */
+    public String executeCommandLenient(String command) throws IOException {
+        checkConnected();
+        LOGGER.debug("Executing remote command (lenient): {}", command);
+        try (Session cmdSession = sshClient.startSession()) {
+            Session.Command cmd = cmdSession.exec(command);
+            String output = new String(cmd.getInputStream().readAllBytes(),
+                    java.nio.charset.StandardCharsets.UTF_8);
+            cmd.join(30, TimeUnit.SECONDS);
+            Integer status = cmd.getExitStatus();
+            if (status != null && status != 0) {
+                LOGGER.debug("Command exited with status {} (ignored): {}", status, command);
+            }
+            return output.trim();
+        }
+    }
+
+    /**
      * Executes a shell command on the remote host, optionally with {@code sudo -S}.
      * <p>
      * When {@code useSudo} is {@code true}, the command is prefixed with

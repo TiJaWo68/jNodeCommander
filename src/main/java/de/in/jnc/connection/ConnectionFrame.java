@@ -5,13 +5,18 @@ import java.awt.Color;
 import java.awt.GraphicsDevice;
 import java.awt.GraphicsEnvironment;
 import java.awt.Rectangle;
+import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.IOException;
 import java.util.List;
 
 import javax.swing.JButton;
+import javax.swing.JDialog;
 import javax.swing.JFrame;
+import javax.swing.JMenuItem;
+import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JTabbedPane;
 import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
@@ -21,9 +26,15 @@ import org.apache.logging.log4j.Logger;
 
 import com.formdev.flatlaf.extras.FlatSVGIcon;
 import com.jediterm.terminal.TtyConnector;
+import com.jediterm.terminal.model.StyleState;
+import com.jediterm.terminal.model.TerminalTextBuffer;
 import com.jediterm.terminal.ui.JediTermWidget;
+import com.jediterm.terminal.ui.TerminalActionProvider;
+import com.jediterm.terminal.ui.TerminalPanel;
+import com.jediterm.terminal.ui.settings.SettingsProvider;
 
 import de.in.jnc.ConnectionProfile;
+import de.in.jnc.GlobalSettings;
 import de.in.jnc.ProfileManager;
 import de.in.jnc.connection.browser.BrowserTabManager;
 import de.in.jnc.connection.browser.Endpoint;
@@ -33,9 +44,11 @@ import de.in.jnc.connection.browser.PortForwardManager;
 import de.in.jnc.connection.filetransfer.FileTransferPanel;
 import de.in.jnc.connection.filetransfer.SftpService;
 import de.in.jnc.terminal.DynamicSettingsProvider;
+import de.in.jnc.terminal.JncActionProvider;
 import de.in.jnc.terminal.SshConnection;
 import de.in.jnc.terminal.SshTtyConnector;
 import de.in.jnc.terminal.TerminalSettings;
+import de.in.jnc.terminal.TerminalSettingsPanel;
 
 /**
  * A JFrame with a JTabbedPane containing a terminal tab and a file transfer tab.
@@ -62,6 +75,7 @@ public class ConnectionFrame extends JFrame {
 	private final transient ConnectionProfile profile;
 
 	private final transient JediTermWidget terminalWidget;
+	private Runnable terminalRefreshAction;
 	private final transient TtyConnector ttyConnector;
 	private final transient SftpService sftpService;
 	private final FileTransferPanel fileTransferPanel;
@@ -113,10 +127,39 @@ public class ConnectionFrame extends JFrame {
 		tabbedPane = new JTabbedPane();
 
 		// ── Tab 0: Terminal (pinned, icon-only) ────────────────────────
-		terminalWidget = new JediTermWidget(DEFAULT_COLUMNS, DEFAULT_ROWS, new DynamicSettingsProvider(settings));
+		DynamicSettingsProvider settingsProvider = new DynamicSettingsProvider(settings);
+		terminalWidget = new JediTermWidget(DEFAULT_COLUMNS, DEFAULT_ROWS, settingsProvider) {
+			@Override
+			protected TerminalPanel createTerminalPanel(SettingsProvider sp, StyleState ss, TerminalTextBuffer buf) {
+				// Custom TerminalPanel that adds "Settings..." at the very end of the context menu
+				return new TerminalPanel(sp, buf, ss) {
+					{
+						// Capture refresh action within the TerminalPanel subclass,
+						// where reinitFontAndResize() is accessible as a protected method
+						ConnectionFrame.this.terminalRefreshAction = this::reinitFontAndResize;
+					}
+
+					@Override
+					protected JPopupMenu createPopupMenu(TerminalActionProvider actionProvider) {
+						JPopupMenu popup = super.createPopupMenu(actionProvider);
+						popup.addSeparator();
+						JMenuItem settingsItem = new JMenuItem("Settings...");
+						settingsItem.setMnemonic(KeyEvent.VK_S);
+						settingsItem.addActionListener(e -> showTerminalSettingsDialog());
+						popup.add(settingsItem);
+						return popup;
+					}
+				};
+			}
+		};
 		ttyConnector = new SshTtyConnector(sshConnection);
 		terminalWidget.setTtyConnector(ttyConnector);
 		terminalWidget.getTerminalPanel().setDefaultCursorShape(settings.getEffectiveCursorShape());
+
+		// ── Custom Context Menu: Credentials (Story 4.1) ───────────────
+		JncActionProvider jncActionProvider = new JncActionProvider(
+				sshConnection, this::insertTextAtCursor);
+		terminalWidget.setNextProvider(jncActionProvider);
 
 		FlatSVGIcon terminalIcon = new FlatSVGIcon("terminal.svg", 16, 16);
 		tabbedPane.addTab(null, terminalIcon, terminalWidget, "SSH Terminal Session");
@@ -319,6 +362,82 @@ public class ConnectionFrame extends JFrame {
 				LOGGER.error("Failed to re-discover endpoints after view toggle", e);
 			}
 		});
+	}
+
+	// ─── Story 4.1: Terminal Context Menu Extensions ────────────────────
+
+	/**
+	 * Writes the given text to the terminal's SSH shell channel,
+	 * effectively inserting it at the cursor position.
+	 */
+	private void insertTextAtCursor(String text) {
+		try {
+			ttyConnector.write(text);
+		} catch (IOException e) {
+			LOGGER.error("Failed to insert text at cursor: {}", e.getMessage());
+		}
+	}
+
+	/**
+	 * Opens the per-profile terminal settings dialog (modal).
+	 * <p>
+	 * If the connection has an associated profile, the override is saved
+	 * back to the profile. The terminal widget is <b>not</b> automatically
+	 * refreshed — the settings take effect on the next connection.
+	 */
+	private void showTerminalSettingsDialog() {
+		String profileName = (profile != null) ? profile.getName() : "Quick Connect";
+		JDialog dialog = new JDialog(this, "Terminal Settings \u2013 " + profileName, true);
+		dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+		dialog.setLayout(new BorderLayout());
+		dialog.setSize(450, 350);
+		dialog.setLocationRelativeTo(this);
+		dialog.setIconImage(new FlatSVGIcon("gear.svg", 32, 32).getImage());
+
+		TerminalSettingsPanel settingsPanel = new TerminalSettingsPanel(true);
+
+		// If profile has a terminal settings override, pre-populate
+		if (profile != null && profile.getTerminalSettingsOverride() != null) {
+			settingsPanel.setSettings(profile.getTerminalSettingsOverride());
+		}
+
+		dialog.add(settingsPanel, BorderLayout.CENTER);
+
+		// Button panel
+		JPanel buttonPanel = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT, 10, 5));
+		JButton saveBtn = new JButton("Save");
+		JButton cancelBtn = new JButton("Cancel");
+
+		saveBtn.addActionListener(e -> {
+			TerminalSettings newSettings = settingsPanel.getSettings();
+			if (profile != null) {
+				profile.setTerminalSettingsOverride(newSettings);
+				ProfileManager.getInstance().addOrUpdateProfile(profile);
+				LOGGER.info("Per-profile terminal settings saved for '{}'", profile.getName());
+			}
+
+			// Apply settings to the running terminal immediately
+			terminalSettings.setColorScheme(newSettings.getColorScheme());
+			terminalSettings.setFontFamily(newSettings.getFontFamily());
+			terminalSettings.setFontSize(newSettings.getFontSize());
+			terminalSettings.setCursorShape(newSettings.getCursorShape());
+			terminalSettings.setCursorBlinkRateMs(newSettings.getCursorBlinkRateMs());
+			terminalSettings.setCustomForeground(newSettings.getCustomForeground());
+			terminalSettings.setCustomBackground(newSettings.getCustomBackground());
+			if (terminalRefreshAction != null) {
+				terminalRefreshAction.run();
+			}
+
+			dialog.dispose();
+		});
+
+		cancelBtn.addActionListener(e -> dialog.dispose());
+
+		buttonPanel.add(saveBtn);
+		buttonPanel.add(cancelBtn);
+		dialog.add(buttonPanel, BorderLayout.SOUTH);
+
+		dialog.setVisible(true);
 	}
 
 	// ─── Getters ──────────────────────────────────────────────────────────

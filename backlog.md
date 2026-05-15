@@ -65,9 +65,13 @@ This document outlines the development phases structured as Epics and User Stori
 ## Epic 4: Automation Core (The JLock Magic)
 **Goal:** Automate credential retrieval and application login.
 
-* [ ] **Story 4.1: Background Credential Extraction**
-  * Implement an automated SSH command execution (`show_credentials`) upon connection.
-  * Build a parser to extract URLs, usernames, and passwords from the console output.
+* [x] **Story 4.1: JediTerm Context Menu Extensions (Credentials & Settings)**
+  * Add "Credentials..." entry (top) to JediTerm's right-click context menu.
+  * Execute `show_credentials` on the remote host via SSH when clicked.
+  * Build a parser to extract credentials (`name`, `username`, `password`) from the output.
+  * Show a popup with all entries; select username or password to insert at cursor position.
+  * Add "Settings..." entry (bottom) to open the per-profile terminal settings dialog.
+  * Wire the custom `JncActionProvider` into the existing `TerminalActionProvider` chain.
 * [ ] **Story 4.2: Dynamic Tabs & JS-Injection**
   * Dynamically open a JCEF tab for each extracted URL.
   * Implement the DOM-Watcher and JavaScript injection logic to automatically fill in the login credentials.
