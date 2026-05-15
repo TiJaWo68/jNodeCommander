@@ -19,6 +19,24 @@ public class ConnectionProfile {
 	private String keyFilePath;
 	private long lastUsed;
 
+	/** Last local directory used in the file transfer panel, or null. */
+	private String lastLocalDirectory;
+
+	/** Last remote directory used in the file transfer panel, or null. */
+	private String lastRemoteDirectory;
+
+	/** Last window X position, or -1 if not set. */
+	private int windowX = -1;
+
+	/** Last window Y position, or -1 if not set. */
+	private int windowY = -1;
+
+	/** Last window width, or -1 if not set. */
+	private int windowWidth = -1;
+
+	/** Last window height, or -1 if not set. */
+	private int windowHeight = -1;
+
 	/**
 	 * Optional per-profile terminal settings override.
 	 * If null, the global terminal settings from {@link GlobalSettings} are used.
@@ -120,6 +138,114 @@ public class ConnectionProfile {
 	 *
 	 * @return the effective TerminalSettings to use when connecting
 	 */
+	/**
+	 * Returns the last local directory used in the file transfer panel.
+	 *
+	 * @return the last local directory path, or null
+	 */
+	public String getLastLocalDirectory() {
+		return lastLocalDirectory;
+	}
+
+	/**
+	 * Sets the last local directory used in the file transfer panel.
+	 *
+	 * @param lastLocalDirectory the directory path to persist
+	 */
+	public void setLastLocalDirectory(String lastLocalDirectory) {
+		this.lastLocalDirectory = lastLocalDirectory;
+	}
+
+	/**
+	 * Returns the last remote directory used in the file transfer panel.
+	 *
+	 * @return the last remote directory path, or null
+	 */
+	public String getLastRemoteDirectory() {
+		return lastRemoteDirectory;
+	}
+
+	/**
+	 * Sets the last remote directory used in the file transfer panel.
+	 *
+	 * @param lastRemoteDirectory the directory path to persist
+	 */
+	public void setLastRemoteDirectory(String lastRemoteDirectory) {
+		this.lastRemoteDirectory = lastRemoteDirectory;
+	}
+
+	/**
+	 * Returns the last window X position, or -1 if not set.
+	 *
+	 * @return the X coordinate, or -1
+	 */
+	public int getWindowX() {
+		return windowX;
+	}
+
+	/**
+	 * Sets the last window X position.
+	 *
+	 * @param windowX the X coordinate
+	 */
+	public void setWindowX(int windowX) {
+		this.windowX = windowX;
+	}
+
+	/**
+	 * Returns the last window Y position, or -1 if not set.
+	 *
+	 * @return the Y coordinate, or -1
+	 */
+	public int getWindowY() {
+		return windowY;
+	}
+
+	/**
+	 * Sets the last window Y position.
+	 *
+	 * @param windowY the Y coordinate
+	 */
+	public void setWindowY(int windowY) {
+		this.windowY = windowY;
+	}
+
+	/**
+	 * Returns the last window width, or -1 if not set.
+	 *
+	 * @return the width in pixels, or -1
+	 */
+	public int getWindowWidth() {
+		return windowWidth;
+	}
+
+	/**
+	 * Sets the last window width.
+	 *
+	 * @param windowWidth the width in pixels
+	 */
+	public void setWindowWidth(int windowWidth) {
+		this.windowWidth = windowWidth;
+	}
+
+	/**
+	 * Returns the last window height, or -1 if not set.
+	 *
+	 * @return the height in pixels, or -1
+	 */
+	public int getWindowHeight() {
+		return windowHeight;
+	}
+
+	/**
+	 * Sets the last window height.
+	 *
+	 * @param windowHeight the height in pixels
+	 */
+	public void setWindowHeight(int windowHeight) {
+		this.windowHeight = windowHeight;
+	}
+
 	public TerminalSettings resolveTerminalSettings() {
 		if (terminalSettingsOverride != null) {
 			return terminalSettingsOverride;

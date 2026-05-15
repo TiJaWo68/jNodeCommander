@@ -93,6 +93,30 @@ public abstract class AbstractFilePanel extends JPanel {
             }
         });
 
+        // Set maximum column widths for Size, Last Modified, and Permissions
+        // so these columns cannot be expanded beyond the content they will ever need.
+        javax.swing.table.TableColumnModel columnModel = fileTable.getColumnModel();
+        java.awt.FontMetrics fm = fileTable.getFontMetrics(fileTable.getFont());
+
+        if (columnModel.getColumnCount() > 1) {
+            // Size column: "999.9 GB" = 8 chars or "<DIR>" = 5 chars
+            int sizeWidth = Math.max(fm.stringWidth("999.9 GB"), fm.stringWidth("<DIR>")) + 14;
+            columnModel.getColumn(1).setPreferredWidth(sizeWidth);
+            columnModel.getColumn(1).setMaxWidth(sizeWidth);
+        }
+        if (columnModel.getColumnCount() > 2) {
+            // Last Modified column: "yyyy-MM-dd HH:mm" = 16 chars
+            int dateWidth = fm.stringWidth("yyyy-MM-dd HH:mm") + 14;
+            columnModel.getColumn(2).setPreferredWidth(dateWidth);
+            columnModel.getColumn(2).setMaxWidth(dateWidth);
+        }
+        if (showPermissions && columnModel.getColumnCount() > 3) {
+            // Permissions column: "-rwxr-xr-x" = 10 chars
+            int permWidth = fm.stringWidth("-rwxr-xr-x") + 14;
+            columnModel.getColumn(3).setPreferredWidth(permWidth);
+            columnModel.getColumn(3).setMaxWidth(permWidth);
+        }
+
         JScrollPane scrollPane = new JScrollPane(fileTable);
         add(scrollPane, BorderLayout.CENTER);
 

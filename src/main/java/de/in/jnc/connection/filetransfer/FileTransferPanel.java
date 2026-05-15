@@ -8,13 +8,20 @@ import java.awt.event.ActionEvent;
 import java.awt.event.FocusAdapter;
 import java.awt.event.FocusEvent;
 import java.awt.event.KeyEvent;
+import java.nio.file.Path;
 
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
+import javax.swing.Box;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import de.in.jnc.ConnectionProfile;
 import javax.swing.JPopupMenu;
 import javax.swing.JSplitPane;
 import javax.swing.JTable;
@@ -42,9 +49,12 @@ import javax.swing.SwingWorker;
  */
 public class FileTransferPanel extends JPanel {
 
+    private static final Logger LOGGER = LogManager.getLogger(FileTransferPanel.class);
+
     private final LocalFilePanel localPanel;
     private final RemoteFilePanel remotePanel;
     private final ProgressPanel progressPanel;
+    private final ConnectionProfile profile;
 
     /** Tracks which panel's table was last focused (for toolbar button clicks). */
     private AbstractFilePanel lastFocusedPanel;
@@ -53,15 +63,20 @@ public class FileTransferPanel extends JPanel {
      * Creates a new file transfer panel.
      *
      * @param sftpService the SFTP service for remote file operations
+     * @param profile     the connection profile for persisting last directories, or null
      */
-    public FileTransferPanel(SftpService sftpService) {
+    public FileTransferPanel(SftpService sftpService, ConnectionProfile profile) {
         super(new BorderLayout());
 
         // Create panels
         localPanel = new LocalFilePanel();
         remotePanel = new RemoteFilePanel(sftpService);
         progressPanel = new ProgressPanel();
+        this.profile = profile;
         lastFocusedPanel = localPanel;
+
+        // Restore last directories from the profile, if available
+        restoreDirectoriesFromProfile();
 
         // Track focus on both file tables so toolbar buttons know which panel is active
         installFocusTracking(localPanel.getFileTable(), localPanel);
@@ -137,21 +152,23 @@ public class FileTransferPanel extends JPanel {
         renameBtn.addActionListener(this::onRename);
         toolBar.add(renameBtn);
 
-        toolBar.addSeparator();
+        toolBar.add(Box.createHorizontalStrut(10));
 
         // F5: Copy
-        JButton copyBtn = new JButton("F5: Copy \u2192");
+        JButton copyBtn = new JButton("F5: Copy");
         copyBtn.setToolTipText("Copy selected items from the active panel to the other panel");
         copyBtn.addActionListener(this::onCopy);
         toolBar.add(copyBtn);
 
+        toolBar.add(Box.createHorizontalStrut(10));
+
         // F6: Move
-        JButton moveBtn = new JButton("F6: Move \u2192");
+        JButton moveBtn = new JButton("F6: Move");
         moveBtn.setToolTipText("Move selected items from the active panel to the other panel");
         moveBtn.addActionListener(this::onMove);
         toolBar.add(moveBtn);
 
-        toolBar.addSeparator();
+        toolBar.add(Box.createHorizontalStrut(10));
 
         // F7: MkDir
         JButton mkdirBtn = new JButton("F7: MkDir");
@@ -159,13 +176,15 @@ public class FileTransferPanel extends JPanel {
         mkdirBtn.addActionListener(this::onMkDir);
         toolBar.add(mkdirBtn);
 
+        toolBar.add(Box.createHorizontalStrut(10));
+
         // F8: Delete
         JButton deleteBtn = new JButton("F8: Delete");
         deleteBtn.setToolTipText("Delete selected items on the active panel");
         deleteBtn.addActionListener(this::onDelete);
         toolBar.add(deleteBtn);
 
-        toolBar.addSeparator();
+        toolBar.add(Box.createHorizontalStrut(10));
 
         // F9: Refresh
         JButton refreshBtn = new JButton("F9: Refresh");
@@ -345,6 +364,7 @@ public class FileTransferPanel extends JPanel {
         bindKey(condition, KeyStroke.getKeyStroke(KeyEvent.VK_F6, 0), "move", this::onMove);
         bindKey(condition, KeyStroke.getKeyStroke(KeyEvent.VK_F7, 0), "mkdir", this::onMkDir);
         bindKey(condition, KeyStroke.getKeyStroke(KeyEvent.VK_F8, 0), "delete", this::onDelete);
+        bindKey(condition, KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0), "deleteDel", this::onDelete);
         bindKey(condition, KeyStroke.getKeyStroke(KeyEvent.VK_F9, 0), "refresh", this::onRefresh);
         bindKey(condition, KeyStroke.getKeyStroke(KeyEvent.VK_TAB, 0), "switchPanel", this::onSwitchPanel);
     }
@@ -380,6 +400,8 @@ public class FileTransferPanel extends JPanel {
         table.getInputMap(condition).put(
                 KeyStroke.getKeyStroke(KeyEvent.VK_F8, 0), "tableDelete");
         table.getInputMap(condition).put(
+                KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0), "tableDeleteDel");
+        table.getInputMap(condition).put(
                 KeyStroke.getKeyStroke(KeyEvent.VK_F9, 0), "tableRefresh");
         table.getInputMap(condition).put(
                 KeyStroke.getKeyStroke(KeyEvent.VK_TAB, 0), "tableSwitchPanel");
@@ -399,12 +421,59 @@ public class FileTransferPanel extends JPanel {
         table.getActionMap().put("tableDelete", new AbstractAction() {
             @Override public void actionPerformed(ActionEvent e) { onDelete(e); }
         });
+        table.getActionMap().put("tableDeleteDel", new AbstractAction() {
+            @Override public void actionPerformed(ActionEvent e) { onDelete(e); }
+        });
         table.getActionMap().put("tableRefresh", new AbstractAction() {
             @Override public void actionPerformed(ActionEvent e) { onRefresh(e); }
         });
         table.getActionMap().put("tableSwitchPanel", new AbstractAction() {
             @Override public void actionPerformed(ActionEvent e) { onSwitchPanel(e); }
         });
+    }
+
+    // ─── Profile directory persistence ───────────────────────────────────
+
+    /**
+     * Restores the last local and remote directories from the connection profile.
+     * Falls back to defaults if no saved directories exist.
+     */
+    private void restoreDirectoriesFromProfile() {
+        if (profile == null) {
+            return;
+        }
+        if (profile.getLastLocalDirectory() != null) {
+            try {
+                localPanel.navigateTo(Path.of(profile.getLastLocalDirectory()));
+            } catch (Exception e) {
+                LOGGER.warn("Could not restore last local directory: {}", e.getMessage());
+            }
+        }
+        if (profile.getLastRemoteDirectory() != null) {
+            try {
+                remotePanel.navigateTo(profile.getLastRemoteDirectory());
+            } catch (Exception e) {
+                LOGGER.warn("Could not restore last remote directory: {}", e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Writes the current local and remote directories back into the connection profile.
+     * Does nothing if no profile is set.
+     */
+    public void saveDirectoriesToProfile() {
+        if (profile == null) {
+            return;
+        }
+        Path localPath = localPanel.getCurrentPath();
+        if (localPath != null) {
+            profile.setLastLocalDirectory(localPath.toAbsolutePath().normalize().toString());
+        }
+        String remotePath = remotePanel.getCurrentPath();
+        if (remotePath != null) {
+            profile.setLastRemoteDirectory(remotePath);
+        }
     }
 
     // ─── Public accessors ────────────────────────────────────────────────

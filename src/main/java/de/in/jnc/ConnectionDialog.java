@@ -332,6 +332,7 @@ public class ConnectionDialog extends JDialog {
 	}
 
 	private void onConnect() {
+		// Save/update profile if applicable
 		if (loadedProfileId == null) {
 			promptSaveProfile(true);
 		} else {
@@ -343,6 +344,14 @@ public class ConnectionDialog extends JDialog {
 					ProfileManager.getInstance().addOrUpdateProfile(p);
 				});
 		}
+
+		// Resolve the profile reference for directory persistence in FileTransferPanel
+		final ConnectionProfile resolvedProfile = (loadedProfileId != null)
+			? ProfileManager.getInstance().getProfiles().stream()
+				.filter(p -> p.getId().equals(loadedProfileId))
+				.findFirst()
+				.orElse(null)
+			: null;
 
 		final String host = hostField.getText().trim();
 		final int port = (Integer) portSpinner.getValue();
@@ -373,7 +382,7 @@ public class ConnectionDialog extends JDialog {
 
 				// Create ConnectionFrame (may throw IOException from SFTP channel)
 				ConnectionFrame connectionFrame = new ConnectionFrame(
-						user + "@" + host, sshConnection, termSettings);
+						user + "@" + host, sshConnection, termSettings, resolvedProfile);
 				return connectionFrame;
 			}
 

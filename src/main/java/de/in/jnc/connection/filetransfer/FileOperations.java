@@ -58,6 +58,7 @@ public final class FileOperations {
             return null;
         }
 
+        LOGGER.info("Copy {} local file(s) to remote directory {}", files.size(), remoteDir);
         return new FileTransferWorker(files, false, TransferDirection.UPLOAD,
                 remotePanel.getSftpService(), progressPanel);
     }
@@ -81,6 +82,7 @@ public final class FileOperations {
             return null;
         }
 
+        LOGGER.info("Copy {} remote file(s) to local directory {}", files.size(), localDir);
         return new FileTransferWorker(files, false, TransferDirection.DOWNLOAD, sftp, progressPanel);
     }
 
@@ -112,6 +114,8 @@ public final class FileOperations {
             return null;
         }
 
+        LOGGER.info("Move {} local file(s) to remote directory {} (originals will be deleted after upload)",
+                files.size(), remoteDir);
         return new FileTransferWorker(files, true, TransferDirection.UPLOAD,
                 remotePanel.getSftpService(), progressPanel);
     }
@@ -145,6 +149,8 @@ public final class FileOperations {
             return null;
         }
 
+        LOGGER.info("Move {} remote file(s) to local directory {} (originals will be deleted after download)",
+                files.size(), localDir);
         return new FileTransferWorker(files, true, TransferDirection.DOWNLOAD, sftp, progressPanel);
     }
 
@@ -175,6 +181,7 @@ public final class FileOperations {
         }
 
         List<Path> filesCopy = List.copyOf(selectedFiles);
+        LOGGER.info("Deleting {} local file(s): {}", filesCopy.size(), filesCopy);
         return new SwingWorker<>() {
             @Override
             protected Void doInBackground() {
@@ -182,6 +189,7 @@ public final class FileOperations {
                     if (isCancelled()) break;
                     try {
                         deleteRecursively(file);
+                        LOGGER.debug("Deleted local: {}", file);
                     } catch (IOException e) {
                         LOGGER.error("Failed to delete {}: {}", file, e.getMessage());
                     }
@@ -218,6 +226,7 @@ public final class FileOperations {
 
         SftpService sftp = remotePanel.getSftpService();
         List<String> filesCopy = List.copyOf(selectedFiles);
+        LOGGER.info("Deleting {} remote file(s): {}", filesCopy.size(), filesCopy);
         return new SwingWorker<>() {
             @Override
             protected Void doInBackground() {
@@ -225,6 +234,7 @@ public final class FileOperations {
                     if (isCancelled()) break;
                     try {
                         sftp.delete(remotePath);
+                        LOGGER.debug("Deleted remote: {}", remotePath);
                     } catch (IOException e) {
                         LOGGER.error("Failed to delete remote {}: {}", remotePath, e.getMessage());
                     }
@@ -264,10 +274,12 @@ public final class FileOperations {
         }
 
         Path target = selected.getParent().resolve(newName.trim());
+        LOGGER.info("Renaming local {} -> {}", selected, target);
         return new SwingWorker<>() {
             @Override
             protected Void doInBackground() throws Exception {
                 Files.move(selected, target, StandardCopyOption.ATOMIC_MOVE);
+                LOGGER.debug("Local rename done: {} -> {}", selected, target);
                 return null;
             }
 
@@ -298,10 +310,12 @@ public final class FileOperations {
 
         String newPath = selected.substring(0, selected.lastIndexOf('/') + 1) + newName.trim();
         SftpService sftp = remotePanel.getSftpService();
+        LOGGER.info("Renaming remote {} -> {}", selected, newPath);
         return new SwingWorker<>() {
             @Override
             protected Void doInBackground() throws Exception {
                 sftp.rename(selected, newPath);
+                LOGGER.debug("Remote rename done: {} -> {}", selected, newPath);
                 return null;
             }
 
@@ -324,12 +338,14 @@ public final class FileOperations {
             return null;
         }
         String dirName = name.trim();
+        LOGGER.info("Creating local directory: {} in {}", dirName, localPanel.getCurrentPath());
         return new SwingWorker<>() {
             @Override
             protected Void doInBackground() throws Exception {
                 if (!localPanel.mkdir(dirName)) {
                     throw new IOException("Failed to create directory: " + dirName);
                 }
+                LOGGER.debug("Local directory created: {} in {}", dirName, localPanel.getCurrentPath());
                 return null;
             }
         };
@@ -345,12 +361,14 @@ public final class FileOperations {
             return null;
         }
         String dirName = name.trim();
+        LOGGER.info("Creating remote directory: {} in {}", dirName, remotePanel.getCurrentPath());
         return new SwingWorker<>() {
             @Override
             protected Void doInBackground() throws Exception {
                 if (!remotePanel.mkdir(dirName)) {
                     throw new IOException("Failed to create remote directory: " + dirName);
                 }
+                LOGGER.debug("Remote directory created: {} in {}", dirName, remotePanel.getCurrentPath());
                 return null;
             }
         };
