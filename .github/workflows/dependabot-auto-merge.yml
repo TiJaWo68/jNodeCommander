@@ -20,11 +20,12 @@ jobs:
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
 
-      # Automatisch mergen bei Patch- und Minor-Updates
+      # Automatisch mergen bei Patch- und Minor-Updates (sowie allen GitHub Actions)
       - name: Enable auto-merge for minor and patch updates
         if: |
           steps.metadata.outputs.update-type == 'version-update:semver-patch'
           || steps.metadata.outputs.update-type == 'version-update:semver-minor'
+          || steps.metadata.outputs.package-ecosystem == 'github-actions'
         run: |
           gh pr review --approve "$PR_URL"
           gh pr merge --auto --squash "$PR_URL"
@@ -32,9 +33,11 @@ jobs:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Bei Major-Updates nur kommentieren (kein Auto-Merge)
+      # Bei Major-Updates nur kommentieren (kein Auto-Merge), außer bei GitHub Actions
       - name: Comment on major version updates
-        if: steps.metadata.outputs.update-type == 'version-update:semver-major'
+        if: |
+          steps.metadata.outputs.update-type == 'version-update:semver-major'
+          && steps.metadata.outputs.package-ecosystem != 'github-actions'
         run: |
           gh pr comment "$PR_URL" --body "⚠️ **Major Update** – bitte manuell prüfen und mergen."
         env:
