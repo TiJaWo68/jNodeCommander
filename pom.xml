@@ -29,7 +29,7 @@
 		<dependency>
 			<groupId>com.hierynomus</groupId>
 			<artifactId>sshj</artifactId>
-			<version>0.38.0</version>
+			<version>0.40.0</version>
 		</dependency>
 		<!-- JediTerm Terminal Emulator (Apache 2.0 / LGPLv3) — built from Git submodule libs/jediterm -->
 		<dependency>
