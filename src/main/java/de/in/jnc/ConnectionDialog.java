@@ -16,7 +16,6 @@ import javax.swing.JTextField;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
-import javax.swing.UIManager;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 
@@ -138,7 +137,7 @@ public class ConnectionDialog extends JDialog {
 		// Row 6: Buttons
 		composite.row().space(25);
 		
-		saveBtn.setIcon(UIManager.getIcon("FileView.floppyDriveIcon"));
+		saveBtn.setIcon(new FlatSVGIcon("save.svg", 16, 16));
 		saveBtn.setToolTipText("Save Profile");
 		saveBtn.addActionListener(e -> promptSaveProfile(false));
 

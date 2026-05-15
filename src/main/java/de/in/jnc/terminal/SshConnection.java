@@ -40,6 +40,13 @@ public class SshConnection implements Closeable {
     private final String password;
     private final String keyFilePath;
 
+    /**
+     * Returns the stored password, or {@code null} if key-based authentication is used.
+     */
+    public String getPassword() {
+        return password;
+    }
+
     private SSHClient sshClient;
     private Session session;
     private Shell shell;
@@ -206,6 +213,94 @@ public class SshConnection implements Closeable {
      */
     public boolean isConnected() {
         return connected;
+    }
+
+    /**
+     * Returns the underlying SSH client for advanced operations
+     * such as port forwarding and direct connections.
+     *
+     * @return the SSHJ SSHClient instance (may be {@code null} before {@link #connect()})
+     */
+    public SSHClient getSshClient() {
+        return sshClient;
+    }
+
+    /**
+     * Executes a shell command on the remote host in a <b>separate</b> session
+     * channel, running in parallel to the existing PTY shell.
+     * <p>
+     * This is intended for short-lived commands such as {@code kubectl get svc}
+     * whose output is captured and returned as a single string. The method
+     * waits up to 30 seconds for the command to complete.
+     *
+     * @param command the shell command to execute (e.g. {@code "kubectl get svc --all-namespaces -o json"})
+     * @return the trimmed stdout of the command
+     * @throws IOException          if the command channel cannot be opened or the command fails
+     * @throws IllegalStateException if not connected
+     */
+    public String executeCommand(String command) throws IOException {
+        return executeCommand(command, false);
+    }
+
+    /**
+     * Executes a shell command on the remote host, optionally with {@code sudo -S}.
+     * <p>
+     * When {@code useSudo} is {@code true}, the command is prefixed with
+     * {@code sudo -S} and the stored password is written to the command's stdin.
+     * This avoids password prompts in non-TTY SSH session channels. The password
+     * is sent via the SSH channel's data stream (not as a command-line argument),
+     * so it is not visible in the remote process listing.
+     *
+     * @param command the shell command to execute
+     * @param useSudo if {@code true}, execute the command via {@code sudo -S}
+     *                using the stored password
+     * @return the trimmed stdout of the command
+     * @throws IOException          if the command fails, or if {@code useSudo} is
+     *                              {@code true} but no password is available
+     * @throws IllegalStateException if not connected
+     */
+    public String executeCommand(String command, boolean useSudo) throws IOException {
+        checkConnected();
+
+        String effectiveCommand = command;
+        if (useSudo) {
+            if (password == null || password.isEmpty()) {
+                throw new IOException("sudo requested but no password is available "
+                        + "(key-based authentication without sudo password)");
+            }
+            effectiveCommand = "sudo -S " + command;
+        }
+
+        LOGGER.debug("Executing remote command: {}", effectiveCommand);
+        try (Session cmdSession = sshClient.startSession()) {
+            Session.Command cmd = cmdSession.exec(effectiveCommand);
+
+            // Pipe password to sudo via stdin BEFORE reading stdout
+            if (useSudo) {
+                try (java.io.OutputStream stdin = cmd.getOutputStream()) {
+                    stdin.write((password + "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    stdin.flush();
+                }
+            }
+
+            String output = new String(cmd.getInputStream().readAllBytes(),
+                    java.nio.charset.StandardCharsets.UTF_8);
+            cmd.join(30, TimeUnit.SECONDS);
+            int exitStatus = cmd.getExitStatus() != null ? cmd.getExitStatus() : -1;
+            LOGGER.debug("Command exited with status {}: {}", exitStatus, effectiveCommand);
+            if (exitStatus != 0) {
+                String errorOutput = "";
+                try {
+                    errorOutput = new String(cmd.getErrorStream().readAllBytes(),
+                            java.nio.charset.StandardCharsets.UTF_8);
+                } catch (Exception ignored) {
+                    // best-effort
+                }
+                throw new IOException("Command exited with status " + exitStatus
+                        + ": " + effectiveCommand + "\nstderr: " + errorOutput);
+            }
+            return output.trim();
+        }
     }
 
     /**

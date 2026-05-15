@@ -1,20 +1,19 @@
 <svg viewBox="50 25 410 460" xmlns="http://www.w3.org/2000/svg" fill="none">
- <!-- Hintergrund Sechseck (Navy Blue) -->
-
- <!-- Netzwerk-Struktur (Cyan) -->
- <!-- Terminal Prompt (>_) -->
- <!-- Akzent-Overlay für Tiefe -->
+ <!-- Background hexagon (Dark Gray) -->
+ <!-- Network structure (Amber/Orange accent) -->
+ <!-- Terminal Prompt (>_) in Orange -->
+ <!-- Accent overlay for depth -->
  <g>
   <title>Layer 1</title>
-  <path id="svg_1" stroke-width="15" stroke="#00BCD4" fill="#1B2B44" d="m256,50l177.5,102.5l0,205l-177.5,102.5l-177.5,-102.5l0,-205l177.5,-102.5z"/>
-  <circle id="svg_2" fill="#00BCD4" r="25" cy="152.5" cx="78.5"/>
-  <circle id="svg_3" fill="#00BCD4" r="25" cy="357.5" cx="78.5"/>
-  <circle id="svg_4" fill="#00BCD4" r="25" cy="50" cx="256"/>
-  <line id="svg_5" stroke-width="8" stroke="#00BCD4" y2="50" x2="256" y1="152.5" x1="78.5"/>
-  <line id="svg_6" stroke-width="8" stroke="#00BCD4" y2="152.5" x2="78.5" y1="357.5" x1="78.5"/>
-  <path id="svg_7" stroke-linejoin="round" stroke-linecap="round" stroke-width="30" stroke="white" d="m190,180l80,76l-80,76"/>
-  <line id="svg_8" stroke-linecap="round" stroke-width="30" stroke="white" y2="332" x2="350" y1="332" x1="290"/>
-  <path id="svg_9" fill-opacity="0.05" fill="white" d="m256,50l177.5,102.5l0,205l-177.5,-101.5l0,-206z"/>
-  <circle id="svg_10" fill="#00BCD4" r="25" cy="452" cx="256"/>
+  <path id="svg_1" stroke-width="15" stroke="#FFB74D" fill="#2B2B2B" d="m256,50l177.5,102.5l0,205l-177.5,102.5l-177.5,-102.5l0,-205l177.5,-102.5z"/>
+  <circle id="svg_2" fill="#FFB74D" r="25" cy="152.5" cx="78.5"/>
+  <circle id="svg_3" fill="#FFB74D" r="25" cy="357.5" cx="78.5"/>
+  <circle id="svg_4" fill="#FFB74D" r="25" cy="50" cx="256"/>
+  <line id="svg_5" stroke-width="8" stroke="#FFB74D" y2="50" x2="256" y1="152.5" x1="78.5"/>
+  <line id="svg_6" stroke-width="8" stroke="#FFB74D" y2="152.5" x2="78.5" y1="357.5" x1="78.5"/>
+  <path id="svg_7" stroke-linejoin="round" stroke-linecap="round" stroke-width="30" stroke="#FFB74D" d="m190,180l80,76l-80,76"/>
+  <line id="svg_8" stroke-linecap="round" stroke-width="30" stroke="#FFB74D" y2="332" x2="350" y1="332" x1="290"/>
+  <path id="svg_9" fill-opacity="0.08" fill="white" d="m256,50l177.5,102.5l0,205l-177.5,-101.5l0,-206z"/>
+  <circle id="svg_10" fill="#FFB74D" r="25" cy="452" cx="256"/>
  </g>
 </svg>
