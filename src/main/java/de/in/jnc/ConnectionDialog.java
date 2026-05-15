@@ -352,9 +352,9 @@ public class ConnectionDialog extends JDialog {
 
 		LOGGER.info("Connection requested: {}@{}:{}", user, host, port);
 
-		// Disable the dialog to prevent double-click
+		// Disable the dialog to prevent double-click and show progress in title
 		connectBtn.setEnabled(false);
-		connectBtn.setText("Connecting...");
+		setTitle("Connecting to " + host + "...");
 
 		// Resolve terminal settings: check per-profile override, fall back to global
 		final TerminalSettings termSettings = resolveTerminalSettings();
@@ -401,7 +401,7 @@ public class ConnectionDialog extends JDialog {
 				} finally {
 					// Re-enable dialog so user can retry
 					connectBtn.setEnabled(true);
-					connectBtn.setText("Connect");
+					setTitle("Connect to Host");
 				}
 			}
 		};

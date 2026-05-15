@@ -9,15 +9,35 @@ import javax.swing.table.AbstractTableModel;
 /**
  * Table model for both local and remote file panels.
  * <p>
- * Columns: Name, Size, Last Modified, Permissions.
+ * Columns (when permissions are shown): Name, Size, Last Modified, Permissions.<br>
+ * Columns (when permissions are hidden): Name, Size, Last Modified.
+ * <p>
  * Supports sorting by clicking column headers (managed externally via TableRowSorter).
  */
 public class FileTableModel extends AbstractTableModel {
 
-    private static final String[] COLUMN_NAMES = { "Name", "Size", "Last Modified", "Permissions" };
+    private static final String[] COLUMN_NAMES_FULL = { "Name", "Size", "Last Modified", "Permissions" };
+    private static final String[] COLUMN_NAMES_NO_PERMS = { "Name", "Size", "Last Modified" };
     private static final Class<?>[] COLUMN_TYPES = { String.class, String.class, String.class, String.class };
 
+    private final boolean showPermissions;
     private List<FileEntry> entries = new ArrayList<>();
+
+    /**
+     * Creates a model with all columns visible (including Permissions).
+     */
+    public FileTableModel() {
+        this(true);
+    }
+
+    /**
+     * Creates a model with optional Permissions column.
+     *
+     * @param showPermissions true to include the Permissions column, false to hide it
+     */
+    public FileTableModel(boolean showPermissions) {
+        this.showPermissions = showPermissions;
+    }
 
     @Override
     public int getRowCount() {
@@ -26,12 +46,13 @@ public class FileTableModel extends AbstractTableModel {
 
     @Override
     public int getColumnCount() {
-        return COLUMN_NAMES.length;
+        return showPermissions ? COLUMN_NAMES_FULL.length : COLUMN_NAMES_NO_PERMS.length;
     }
 
     @Override
     public String getColumnName(int column) {
-        return COLUMN_NAMES[column];
+        String[] names = showPermissions ? COLUMN_NAMES_FULL : COLUMN_NAMES_NO_PERMS;
+        return names[column];
     }
 
     @Override
@@ -46,7 +67,7 @@ public class FileTableModel extends AbstractTableModel {
             case 0 -> entry.getName();
             case 1 -> entry.getFormattedSize();
             case 2 -> formatTimestamp(entry.getLastModified());
-            case 3 -> entry.getPermissions();
+            case 3 -> entry.getPermissions(); // only reached when showPermissions=true
             default -> "";
         };
     }

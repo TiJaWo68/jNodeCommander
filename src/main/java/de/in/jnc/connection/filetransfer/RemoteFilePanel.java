@@ -51,6 +51,11 @@ public class RemoteFilePanel extends AbstractFilePanel {
         loadDirectory(currentPath);
     }
 
+    @Override
+    protected void navigateToPath(String path) {
+        navigateTo(path);
+    }
+
     /**
      * Navigates to the specified remote directory and refreshes the listing.
      *
@@ -158,7 +163,7 @@ public class RemoteFilePanel extends AbstractFilePanel {
             boolean showParent = !"/".equals(path);
             List<FileEntry> sorted = FileTableModel.sortDirectoriesFirst(entries, showParent);
             tableModel.setEntries(sorted);
-            updatePathLabel(path);
+            updatePathField(path);
             LOGGER.debug("Loaded {} entries from remote {}", entries.size(), path);
         } catch (IOException e) {
             LOGGER.error("Cannot list remote directory {}: {}", path, e.getMessage());

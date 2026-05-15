@@ -2,7 +2,10 @@ package de.in.jnc.connection.filetransfer;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 
 import org.apache.logging.log4j.LogManager;
@@ -10,6 +13,8 @@ import org.apache.logging.log4j.Logger;
 
 import net.schmizz.sshj.sftp.FileAttributes;
 import net.schmizz.sshj.sftp.FileMode;
+import net.schmizz.sshj.sftp.OpenMode;
+import net.schmizz.sshj.sftp.RemoteFile;
 import net.schmizz.sshj.sftp.RemoteResourceInfo;
 import net.schmizz.sshj.sftp.SFTPClient;
 import net.schmizz.sshj.sftp.SFTPException;
@@ -142,6 +147,62 @@ public class SftpService implements Closeable {
      */
     public boolean isConnected() {
         return connected;
+    }
+
+    // ─── Stream-based I/O for progress tracking ─────────────────────────
+
+    /**
+     * Opens a remote file for reading (download) and returns an {@link InputStream}.
+     * The caller is responsible for closing the stream.
+     *
+     * @param remotePath absolute remote path
+     * @return an InputStream to read the remote file contents
+     * @throws IOException if the file cannot be opened
+     */
+    public InputStream openRead(String remotePath) throws IOException {
+        RemoteFile remoteFile = sftpClient.open(remotePath, EnumSet.of(OpenMode.READ));
+        return remoteFile.new RemoteFileInputStream();
+    }
+
+    /**
+     * Opens a remote file for writing (upload) and returns an {@link OutputStream}.
+     * The caller is responsible for closing the stream.
+     *
+     * @param remotePath absolute remote path
+     * @return an OutputStream to write the remote file contents
+     * @throws IOException if the file cannot be opened for writing
+     */
+    public OutputStream openWrite(String remotePath) throws IOException {
+        RemoteFile remoteFile = sftpClient.open(remotePath,
+                EnumSet.of(OpenMode.CREAT, OpenMode.WRITE, OpenMode.TRUNC));
+        return remoteFile.new RemoteFileOutputStream();
+    }
+
+    /**
+     * Returns the size of a remote file in bytes.
+     *
+     * @param remotePath absolute remote path
+     * @return file size in bytes
+     * @throws IOException if the file cannot be accessed
+     */
+    public long getFileSize(String remotePath) throws IOException {
+        FileAttributes attrs = sftpClient.stat(remotePath);
+        return attrs.getSize();
+    }
+
+    /**
+     * Checks whether a remote path exists.
+     *
+     * @param remotePath absolute remote path
+     * @return true if the path exists
+     */
+    public boolean exists(String remotePath) {
+        try {
+            sftpClient.stat(remotePath);
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
     }
 
     @Override

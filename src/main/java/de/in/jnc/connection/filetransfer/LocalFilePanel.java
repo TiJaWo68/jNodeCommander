@@ -1,23 +1,17 @@
 package de.in.jnc.connection.filetransfer;
 
+import java.awt.BorderLayout;
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
-import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
 
-import javax.swing.JScrollPane;
-import javax.swing.JTable;
-import javax.swing.ListSelectionModel;
-import javax.swing.SwingUtilities;
-import javax.swing.event.ListSelectionEvent;
-import javax.swing.table.TableRowSorter;
+import javax.swing.JComboBox;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -30,6 +24,9 @@ import org.apache.logging.log4j.Logger;
 public class LocalFilePanel extends AbstractFilePanel {
 
     private static final Logger LOGGER = LogManager.getLogger(LocalFilePanel.class);
+
+    private static final boolean IS_WINDOWS =
+            System.getProperty("os.name").toLowerCase().contains("win");
 
     private Path currentPath;
 
@@ -46,8 +43,39 @@ public class LocalFilePanel extends AbstractFilePanel {
      * @param initialPath the starting directory
      */
     public LocalFilePanel(Path initialPath) {
-        super("Local");
+        super("Local", !IS_WINDOWS);
         this.currentPath = initialPath.toAbsolutePath().normalize();
+
+        // Drive selector combo box — stores the real path, displays friendly name
+        JComboBox<String> driveSelector = new JComboBox<>();
+        driveSelector.setEditable(false);
+        java.util.List<String> drives = DriveDetector.getAvailableDrives();
+        for (String drive : drives) {
+            driveSelector.addItem(drive);
+        }
+        // Render friendly names instead of raw paths
+        driveSelector.setRenderer(new javax.swing.ListCellRenderer<>() {
+            private final javax.swing.DefaultListCellRenderer delegate = new javax.swing.DefaultListCellRenderer();
+
+            @Override
+            public java.awt.Component getListCellRendererComponent(
+                    javax.swing.JList<? extends String> list, String value,
+                    int index, boolean isSelected, boolean cellHasFocus) {
+                String display = (value != null) ? DriveDetector.getDisplayName(value) : value;
+                return delegate.getListCellRendererComponent(list, display, index, isSelected, cellHasFocus);
+            }
+        });
+        driveSelector.addActionListener(e -> {
+            String selected = (String) driveSelector.getSelectedItem();
+            if (selected != null) {
+                Path drivePath = Paths.get(selected);
+                if (Files.isDirectory(drivePath)) {
+                    navigateTo(drivePath);
+                }
+            }
+        });
+        topPanel.add(driveSelector, BorderLayout.WEST);
+
         refresh();
     }
 
@@ -58,6 +86,20 @@ public class LocalFilePanel extends AbstractFilePanel {
             navigateToParent();
         } else if (entry.isDirectory()) {
             navigateTo(currentPath.resolve(entry.getName()));
+        }
+    }
+
+    @Override
+    protected void navigateToPath(String path) {
+        try {
+            Path target = Paths.get(path).toAbsolutePath().normalize();
+            if (Files.isDirectory(target)) {
+                navigateTo(target);
+            } else {
+                LOGGER.warn("Not a valid directory: {}", target);
+            }
+        } catch (InvalidPathException e) {
+            LOGGER.warn("Invalid path entered: {} — {}", path, e.getMessage());
         }
     }
 
@@ -168,7 +210,7 @@ public class LocalFilePanel extends AbstractFilePanel {
 
         List<FileEntry> sorted = FileTableModel.sortDirectoriesFirst(entries, showParent);
         tableModel.setEntries(sorted);
-        updatePathLabel(dir.toString());
+        updatePathField(dir.toString());
         LOGGER.debug("Loaded {} entries from local {}", entries.size(), dir);
     }
 
