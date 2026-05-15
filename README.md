@@ -74,3 +74,48 @@ To ensure flexibility in testing and maximum security in production, jnc impleme
 * **SSH Keep-Alive:** SSH tunnels are kept stable throughout the entire lifecycle of a window to allow console commands to be issued at any time.
 
 ---
+
+## 6. CLI-Startparameter
+
+jnc unterstützt beim Starten über die Kommandozeile zwei Flags, um Verbindungen automatisch herzustellen:
+
+### 6.1 `--open` – Gespeicherte Profile öffnen
+
+Öffnet ein oder mehrere gespeicherte Connection-Profile anhand ihres Namens.
+
+```bash
+# Einzelnes Profil öffnen
+java -jar jnc.jar --open="mein-server"
+
+# Mehrere Profile öffnen (kommagetrennt)
+java -jar jnc.jar --open="produktion,staging,dev"
+
+# Kurzform -o
+java -jar jnc.jar -o="produktion"
+```
+
+### 6.2 `--connect` – Ad-hoc Verbindung
+
+Stellt eine direkte SSH-Verbindung mit übergebenen Login-Daten her, ohne dass ein Profil angelegt werden muss.
+
+```bash
+# Format: --connect="benutzer:passwort@hostname:port"
+java -jar jnc.jar --connect="root:meinPasswort@192.168.1.100:2222"
+
+# Port ist optional (Standard: 22)
+java -jar jnc.jar --connect="admin:secret@example.com"
+
+# Kurzform -c
+java -jar jnc.jar -c="user:pass@host:2222"
+
+# Mehrere Ad-hoc Verbindungen (kommagetrennt)
+java -jar jnc.jar --connect="root:pass@host1:2222,admin:secret@host2"
+```
+
+### 6.3 Kombinierter Einsatz
+
+Beide Flags können gleichzeitig verwendet werden:
+
+```bash
+java -jar jnc.jar --open="produktion" --connect="user:pass@staging.local:22"
+```
