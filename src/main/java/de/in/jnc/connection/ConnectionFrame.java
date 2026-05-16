@@ -40,10 +40,12 @@ import de.in.jnc.connection.browser.BrowserTabManager;
 import de.in.jnc.connection.browser.Endpoint;
 import de.in.jnc.connection.browser.EndpointPopupMenu;
 import de.in.jnc.connection.browser.K8sEndpointDiscoverer;
+import de.in.jnc.connection.ChromeTabbedPaneUI;
 import de.in.jnc.connection.browser.PortForwardManager;
 import de.in.jnc.connection.filetransfer.FileTransferPanel;
 import de.in.jnc.connection.filetransfer.SftpService;
 import de.in.jnc.terminal.DynamicSettingsProvider;
+import de.in.jnc.terminal.CredentialsService;
 import de.in.jnc.terminal.JncActionProvider;
 import de.in.jnc.terminal.SshConnection;
 import de.in.jnc.terminal.SshTtyConnector;
@@ -83,6 +85,7 @@ public class ConnectionFrame extends JFrame {
 	private final K8sEndpointDiscoverer endpointDiscoverer;
 	private final PortForwardManager portForwardManager;
 	private final EndpointPopupMenu endpointPopupMenu;
+	private final CredentialsService credentialsService;
 	private JButton webAppsBtn;
 
 	/**
@@ -125,6 +128,10 @@ public class ConnectionFrame extends JFrame {
 
 		// --- Tabbed Pane ---
 		tabbedPane = new JTabbedPane();
+		tabbedPane.setUI(new ChromeTabbedPaneUI());
+		tabbedPane.putClientProperty("JTabbedPane.showTabSeparators", Boolean.FALSE);
+		tabbedPane.putClientProperty("JTabbedPane.hasFullBorder", Boolean.FALSE);
+		tabbedPane.putClientProperty("JTabbedPane.minimumTabHeight", 22);
 
 		// ── Tab 0: Terminal (pinned, icon-only) ────────────────────────
 		DynamicSettingsProvider settingsProvider = new DynamicSettingsProvider(settings);
@@ -156,9 +163,13 @@ public class ConnectionFrame extends JFrame {
 		terminalWidget.setTtyConnector(ttyConnector);
 		terminalWidget.getTerminalPanel().setDefaultCursorShape(settings.getEffectiveCursorShape());
 
+		// ── Credentials Service (Story 4.2) ──────────────────────────────
+		credentialsService = new CredentialsService();
+		credentialsService.initialize(sshConnection);
+
 		// ── Custom Context Menu: Credentials (Story 4.1) ───────────────
 		JncActionProvider jncActionProvider = new JncActionProvider(
-				sshConnection, this::insertTextAtCursor);
+				credentialsService, this::insertTextAtCursor);
 		terminalWidget.setNextProvider(jncActionProvider);
 
 		FlatSVGIcon terminalIcon = new FlatSVGIcon("terminal.svg", 16, 16);
@@ -173,6 +184,8 @@ public class ConnectionFrame extends JFrame {
 
 		// ── Browser Tab Manager ──────────────────────────────────────────
 		browserTabManager = new BrowserTabManager(tabbedPane);
+		browserTabManager.setCredentialsCallback(valueInserter ->
+				credentialsService.showCredentialsDialog(this, valueInserter));
 
 		// ── Web Apps Discovery (Story 3.3.2) ─────────────────────────────
 		endpointDiscoverer = new K8sEndpointDiscoverer(sshConnection);

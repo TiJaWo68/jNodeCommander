@@ -35,6 +35,14 @@ public class App {
 	private static final Logger LOGGER = LogManager.getLogger(App.class);
 
 	public static void main(String[] args) {
+		// Must be set before any JavaFX/JFXPanel class is loaded.
+		// When com.sun.webkit.useJVMSSLSocket=true, the JavaFX WebView uses
+		// the JDK SSL layer (and thus our custom CertificateTrustManager)
+		// for HTTP/1.1 connections. For HTTP/2 the native SSL stack is used,
+		// so we additionally import accepted certificates into the Windows
+		// certificate store via certutil.
+		System.setProperty("com.sun.webkit.useJVMSSLSocket", "true");
+
 		LOGGER.info("Starting jNodeCommander...");
 
 		Log4jTools.redirectStdOutErrLog();

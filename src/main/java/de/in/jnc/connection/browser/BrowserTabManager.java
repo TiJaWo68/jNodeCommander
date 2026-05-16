@@ -1,14 +1,22 @@
 package de.in.jnc.connection.browser;
 
 import java.awt.Component;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Consumer;
 
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTabbedPane;
+
+import com.formdev.flatlaf.extras.FlatSVGIcon;
+
+import de.in.jnc.connection.ChromeTabbedPaneUI;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -31,6 +39,7 @@ public class BrowserTabManager {
     private final JTabbedPane tabbedPane;
     private final Map<String, BrowserPanel> urlToPanel;
     private int tabCounter;
+    private Consumer<Consumer<String>> credentialsCallback;
 
     /**
      * Creates a new manager bound to the given tabbed pane.
@@ -74,6 +83,7 @@ public class BrowserTabManager {
         BrowserPanel panel = new BrowserPanel(url);
         panel.setNewTabCallback(this::openUrlInNewTab);
         panel.setTitleCallback(title -> onTitleChanged(panel, title));
+        panel.setCredentialsCallback(credentialsCallback);
 
         urlToPanel.put(key, panel);
 
@@ -102,6 +112,7 @@ public class BrowserTabManager {
         BrowserPanel panel = new BrowserPanel("about:blank");
         panel.setNewTabCallback(this::openUrlInNewTab);
         panel.setTitleCallback(title -> onTitleChanged(panel, title));
+        panel.setCredentialsCallback(credentialsCallback);
 
         tabbedPane.addTab(tabTitle, panel);
         int newIndex = tabbedPane.indexOfComponent(panel);
@@ -151,29 +162,93 @@ public class BrowserTabManager {
         }
     }
 
+    /**
+     * Sets the credentials callback that will be passed to every new
+     * {@link BrowserPanel}. The callback is invoked when the user selects
+     * "Credentials..." from the browser's right-click context menu.
+     *
+     * @param callback the credentials callback, or {@code null} to disable
+     */
+    public void setCredentialsCallback(Consumer<Consumer<String>> callback) {
+        this.credentialsCallback = callback;
+    }
+
     // ── Internal helpers ──────────────────────────────────────────────
 
     /**
-     * Installs a custom tab component with a close ("✕") button.
+     * Installs a custom tab component with a browser icon, title label,
+     * and a close ("✕") button.
+     * <p>
      * The close button uses the panel reference to find the correct tab index
      * even when other tabs have been opened or closed in the meantime.
+     * A {@link MouseAdapter} on the panel ensures reliable tab selection on
+     * click (works around custom component event-consumption issues).
      */
     private void installTabCloseButton(int tabIndex, String title, BrowserPanel panel) {
-        JPanel tabComponent = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
-        tabComponent.setOpaque(false);
-        tabComponent.add(new JLabel(title));
-        JButton closeBtn = new JButton("\u2715"); // ✕
-        closeBtn.setBorderPainted(false);
-        closeBtn.setContentAreaFilled(false);
-        closeBtn.setFocusable(false);
-        closeBtn.addActionListener(e -> {
-            int idx = tabbedPane.indexOfComponent(panel);
-            if (idx >= FIRST_BROWSER_TAB_INDEX) {
-                closeTab(idx);
-            }
-        });
-        tabComponent.add(closeBtn);
-        tabbedPane.setTabComponentAt(tabIndex, tabComponent);
+    	// Custom tab component with max-width cap (Chrome-like behavior)
+    	JPanel tabComponent = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0)) {
+    		@Override
+    		public Dimension getPreferredSize() {
+    			Dimension pref = super.getPreferredSize();
+    			pref.width = Math.min(pref.width, ChromeTabbedPaneUI.MAX_TAB_WIDTH);
+    			return pref;
+    		}
+    	};
+    	tabComponent.setOpaque(false);
+
+    	// Browser icon
+    	FlatSVGIcon browserIcon = new FlatSVGIcon("globe.svg", 16, 16);
+    	JLabel iconLabel = new JLabel(browserIcon);
+    	iconLabel.setToolTipText(title);
+    	tabComponent.add(iconLabel);
+
+    	// Title label with constrained width so text does not overflow the close button
+    	JLabel label = new JLabel(title) {
+    		@Override
+    		public Dimension getPreferredSize() {
+    			Dimension pref = super.getPreferredSize();
+    			// Reserve space for icon (16), close button (~24), gaps (2+2), margin (4)
+    			int maxLabelWidth = ChromeTabbedPaneUI.MAX_TAB_WIDTH - 16 - 24 - 8;
+    			pref.width = Math.min(pref.width, maxLabelWidth);
+    			return pref;
+    		}
+    	};
+    	label.setToolTipText(title);
+    	tabComponent.add(label);
+
+    	JButton closeBtn = new JButton("\u2715"); // ✕
+    	closeBtn.setBorderPainted(false);
+    	closeBtn.setContentAreaFilled(false);
+    	closeBtn.setFocusable(false);
+    	closeBtn.addActionListener(e -> {
+    		int idx = tabbedPane.indexOfComponent(panel);
+    		if (idx >= FIRST_BROWSER_TAB_INDEX) {
+    			closeTab(idx);
+    		}
+    	});
+    	tabComponent.add(closeBtn);
+
+    	// ── Tab selection on click ─────────────────────────────────────
+    	// Mouse events on lightweight children (JLabel) do not always
+    	// propagate to the parent JTabbedPane. We add MouseAdapters on
+    	// ALL surfaces to ensure reliable tab selection:
+    	//   1. the tabComponent JPanel itself
+    	//   2. the icon JLabel
+    	//   3. the title JLabel
+    	MouseAdapter tabClickHandler = new MouseAdapter() {
+    		@Override
+    		public void mouseClicked(MouseEvent e) {
+    			int idx = tabbedPane.indexOfComponent(panel);
+    			if (idx >= 0) {
+    				tabbedPane.setSelectedIndex(idx);
+    			}
+    		}
+    	};
+    	tabComponent.addMouseListener(tabClickHandler);
+    	iconLabel.addMouseListener(tabClickHandler);
+    	label.addMouseListener(tabClickHandler);
+
+    	tabbedPane.setTabComponentAt(tabIndex, tabComponent);
     }
 
     /**
@@ -207,8 +282,9 @@ public class BrowserTabManager {
             Component tabComp = tabbedPane.getTabComponentAt(index);
             if (tabComp instanceof JPanel panelWithLabel) {
                 for (Component child : panelWithLabel.getComponents()) {
-                    if (child instanceof JLabel label) {
+                    if (child instanceof JLabel label && label.getIcon() == null) {
                         label.setText(title);
+                        label.setToolTipText(title);
                         break;
                     }
                 }

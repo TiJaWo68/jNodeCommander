@@ -7,7 +7,7 @@ This document outlines the development phases structured as Epics and User Stori
 
 * [x] **Story 1.1: Project Initialization**
   * Initialize Git repository.
-  * Create `pom.xml` configured for Java 25.
+  * Create `pom.xml` configured for Java 21.
   * Add core dependencies: Swing, FlatLaf, SSHJ, and JCEF wrapper.
 * [x] **Story 1.2: CI/CD Pipeline Setup**
   * Create a GitHub Actions workflow (`.github/workflows/build.yml`) to compile and test the project on `push` and `pull_request`.
@@ -72,6 +72,44 @@ This document outlines the development phases structured as Epics and User Stori
   * Show a popup with all entries; select username or password to insert at cursor position.
   * Add "Settings..." entry (bottom) to open the per-profile terminal settings dialog.
   * Wire the custom `JncActionProvider` into the existing `TerminalActionProvider` chain.
-* [ ] **Story 4.2: Dynamic Tabs & JS-Injection**
-  * Dynamically open a JCEF tab for each extracted URL.
-  * Implement the DOM-Watcher and JavaScript injection logic to automatically fill in the login credentials.
+* [x] **Story 4.2: Browser Context Menu — Credentials & JS-Injection**
+  * Extract credential logic into reusable, caching `CredentialsService` (one-time fetch at connection setup).
+  * Replace default JavaFX WebView right-click menu with custom context menu (Back, Forward, Reload, Credentials...).
+  * On "Credentials..." click, show the credentials dialog; selected value is injected via JavaScript into the focused input field on the web page.
+  * Dispatch `input` and `change` events after injection for compatibility with React, Angular, Vue.
+
+## Epic 5: Two-Browser Architecture (JavaFX WebView + JCEF)
+**Goal:** Support both JavaFX WebView (default) and JCEF (optional) as browser backends, switchable at global, profile, and per-tab level.
+
+* [ ] **Story 5.1: BrowserBackend Interface + JavaFXWebViewBackend Refactoring**
+  * Define `BrowserBackend` interface with methods: `loadUrl`, `reload`, `goBack`, `goForward`, `canGoBack`, `canGoForward`, `stopLoading`, `dispose`, `getViewComponent`, `setLocationListener`, `setTitleListener`, `setCertificateErrorHandler`, `executeScript`, `setPopupHandler`, `getContextMenuActions`.
+  * Define `BrowserBackendType` enum (`JAVAFX_WEBVIEW`, `JCEF`).
+  * Define `SslCertInfo` class for backend-agnostic certificate info.
+  * Define `CertificateErrorHandler` functional interface.
+  * Extract `JavaFXWebViewBackend` from existing `BrowserPanel`.
+  * Refactor `BrowserPanel` to delegate to `BrowserBackend`.
+  * Connect navigation buttons (back/forward/reload) through backend.
+* [ ] **Story 5.2: JCEF Integration**
+  * Add JCEF dependency to `pom.xml` (natives JAR or ZIP extraction).
+  * Implement `JCEFInitializer` with lazy `CefApp.startup()`.
+  * Implement `JCEFBackend` with `CefLoadHandler.onCertificateError()`.
+  * Use OSR (Off-Screen Rendering) for Swing embedding (`CefOSRComponent`).
+  * SSL: `CertificateErrorHandler` → `CertificateStoreManager` (no Windows import).
+  * Handle `onBeforePopup` for new browser tabs.
+* [ ] **Story 5.3: Backend Switching**
+  * Add `defaultBrowser` field to `GlobalSettings` (JavaFX as default).
+  * Add optional `browserBackend` override to `ConnectionProfile`.
+  * Implement `BrowserPanel.switchBackend(BrowserBackendType)`.
+  * Add "Browser wechseln" context menu entry in browser tab.
+  * Resolve backend: Profile → Global → Default.
+  * Add ComboBox to Settings dialog for default browser selection.
+* [ ] **Story 5.4: CertificateStoreManager for JCEF**
+  * Load PEM certificates from `~/.jnc/certs/` into memory cache.
+  * Add `isKnown(cert)` method for fast fingerprint lookup.
+  * Save newly accepted certificates as PEM files.
+  * Integrate with JCEF's `onCertificateError()` callback.
+* [ ] **Story 5.5: Native Build & Distribution**
+  * Bundle JCEF natives ZIP in `resources/`.
+  * Implement `extractNatives()` for first-run DLL extraction.
+  * Platform detection (Windows 64-bit, macOS, Linux).
+  * Extend launch scripts for JCEF natives library path.
