@@ -100,12 +100,50 @@ public interface BrowserBackend {
     void executeScript(String script);
 
     /**
+     * Registers a callback for the "Credentials..." context menu entry.
+     * <p>
+     * The callback receives a {@code Consumer<String>} that, when invoked
+     * with a credential value, injects that value into the currently
+     * focused input field on the web page via JavaScript.
+     *
+     * @param callback the credentials callback, or {@code null} to clear
+     */
+    void setCredentialsCallback(Consumer<Consumer<String>> callback);
+
+    /**
      * Registers a handler for popup window requests. The handler receives
      * the target URL and should open it in a new tab.
      *
      * @param handler the handler, or {@code null} to clear
      */
     void setPopupHandler(Consumer<String> handler);
+
+    // ── Focus management ─────────────────────────────────────────────
+
+    /**
+     * Releases the browser's keyboard focus so that Swing components
+     * (notably the URL address bar) can receive keyboard input.
+     * <p>
+     * This is essential for JCEF windowed mode, where the native CEF
+     * Canvas (heavyweight AWT) permanently captures all keystrokes
+     * unless explicitly told to release focus.
+     * <p>
+     * In JCEF, this calls {@code CefBrowser.setFocus(false)} which
+     * internally invokes {@code canvas.setFocusable(false)}, preventing
+     * the Canvas from ever getting keyboard focus until focus is
+     * explicitly requested again via {@link #requestFocus()}.
+     */
+    void releaseFocus();
+
+    /**
+     * Gives keyboard focus back to the browser after it was released
+     * via {@link #releaseFocus()}.
+     * <p>
+     * In JCEF, this calls {@code CefBrowser.setFocus(true)} which
+     * internally invokes {@code canvas.setFocusable(true)} and
+     * {@code canvas.requestFocus()}.
+     */
+    void requestFocus();
 
     // ── Context menu ───────────────────────────────────────────────────
 

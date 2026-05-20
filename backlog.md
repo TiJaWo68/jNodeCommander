@@ -46,13 +46,13 @@ This document outlines the development phases structured as Epics and User Stori
   * Build a ConnectionFrame with JTabbedPane (Terminal + File Transfer pinned tabs).
   * Implement dual-pane file transfer (left: local, right: remote) via SFTP (SSHJ).
   * Support Copy (both directions), Delete, Rename, MkDir file operations.
-* [ ] **Story 3.3.1: Browser Tab (JCEF)**
+* [x] **Story 3.3.1: Browser Tab (JCEF)**
   * Embed a JCEF browser instance as a closable dynamic tab within ConnectionFrame.
   * Add URL navigation bar (back, forward, refresh, address field).
   * Implement tab management: existing URL → select tab, new URL → create tab.
   * Provide "New Browser Tab" entry for manual URL entry.
   * Prepare for JS-injection capability (required for Epic 4).
-* [ ] **Story 3.3.2: URL + Service Discovery (Web Apps Menu)**
+* [x] **Story 3.3.2: URL + Service Discovery (Web Apps Menu)**
   * Add `executeCommand()` to SshConnection for running shell commands in a separate channel.
   * Implement kubectl-based service discovery (`kubectl get svc --all-namespaces`) via SSH.
   * Classify endpoints by access type: NodePort (direct), ClusterIP (tunnel required), Ingress.
@@ -81,7 +81,7 @@ This document outlines the development phases structured as Epics and User Stori
 ## Epic 5: Two-Browser Architecture (JavaFX WebView + JCEF)
 **Goal:** Support both JavaFX WebView (default) and JCEF (optional) as browser backends, switchable at global, profile, and per-tab level.
 
-* [ ] **Story 5.1: BrowserBackend Interface + JavaFXWebViewBackend Refactoring**
+* [x] **Story 5.1: BrowserBackend Interface + JavaFXWebViewBackend Refactoring**
   * Define `BrowserBackend` interface with methods: `loadUrl`, `reload`, `goBack`, `goForward`, `canGoBack`, `canGoForward`, `stopLoading`, `dispose`, `getViewComponent`, `setLocationListener`, `setTitleListener`, `setCertificateErrorHandler`, `executeScript`, `setPopupHandler`, `getContextMenuActions`.
   * Define `BrowserBackendType` enum (`JAVAFX_WEBVIEW`, `JCEF`).
   * Define `SslCertInfo` class for backend-agnostic certificate info.
@@ -89,14 +89,14 @@ This document outlines the development phases structured as Epics and User Stori
   * Extract `JavaFXWebViewBackend` from existing `BrowserPanel`.
   * Refactor `BrowserPanel` to delegate to `BrowserBackend`.
   * Connect navigation buttons (back/forward/reload) through backend.
-* [ ] **Story 5.2: JCEF Integration**
+* [x] **Story 5.2: JCEF Integration**
   * Add JCEF dependency to `pom.xml` (natives JAR or ZIP extraction).
   * Implement `JCEFInitializer` with lazy `CefApp.startup()`.
   * Implement `JCEFBackend` with `CefLoadHandler.onCertificateError()`.
   * Use OSR (Off-Screen Rendering) for Swing embedding (`CefOSRComponent`).
   * SSL: `CertificateErrorHandler` → `CertificateStoreManager` (no Windows import).
   * Handle `onBeforePopup` for new browser tabs.
-* [ ] **Story 5.3: Backend Switching**
+* [-] **Story 5.3: Backend Switching** (teilweise: JCEF ist jetzt Default via BrowserPanel, GlobalSettings.defaultBrowser + Settings-UI fehlen noch)
   * Add `defaultBrowser` field to `GlobalSettings` (JavaFX as default).
   * Add optional `browserBackend` override to `ConnectionProfile`.
   * Implement `BrowserPanel.switchBackend(BrowserBackendType)`.
@@ -113,3 +113,33 @@ This document outlines the development phases structured as Epics and User Stori
   * Implement `extractNatives()` for first-run DLL extraction.
   * Platform detection (Windows 64-bit, macOS, Linux).
   * Extend launch scripts for JCEF natives library path.
+
+## Epic 6: Browser-Finalisierung & UX-Politur
+**Goal:** JCEF as sole browser engine, context menu polishing, bookmarks & history, session restore, keyboard shortcuts, auto-focus.
+
+* [ ] **Story 6.1: JavaFX-Backend entfernen & GUI bereinigen**
+ * `BrowserBackendType`: `JAVAFX_WEBVIEW`-Enum-Wert entfernen, auf `JCEF` reduzieren.
+ * `BrowserPanel`: `switchBackend()` und Backend-Parameter entfernen.
+ * `GlobalSettings`/`ConnectionProfile`: Backend-Felder beim Laden ignorieren.
+ * GUI: Alle Backend-Auswahl-UI-Elemente entfernen.
+* [ ] **Story 6.2: JSeparator-UI-Fehler im CredentialsService beheben**
+ * Credentials-Dialog wird von CEF-Callback-Thread ausgelöst → EDT-Dispatch fehlt.
+ * Fix: `onCredentialsRequested()` in `SwingUtilities.invokeLater()` wrappen.
+* [ ] **Story 6.3: BrowserMenu (ersetzt EndpointPopupMenu)**
+  * "Web Apps"-Knopf → vollständiges Browser-Menü: New Tab, Bookmarks, History, Open Tabs, Discover Endpoints.
+  * Bookmarks: `Ctrl+D` in Adresszeile → gespeichert im `ConnectionProfile`, sortiert nach host/url.
+  * History: HTML-Seite im Browser-Tab (wie Chrome), Einträge im `ConnectionProfile` gespeichert.
+  * Open Tabs: dynamische Liste aus `BrowserTabManager`, Klick aktiviert Tab.
+* [ ] **Story 6.4: Globale Tastenkombinationen**
+ * `Alt+C` → Terminal-Tab, `Alt+N` → File-Transfer-Tab, `Alt+1`…`Alt+9` → Browser-Tabs.
+* [ ] **Story 6.5: Tab-Persistenz (Session Restore, optional)**
+  * `ConnectionProfile.restoreTabs` (boolean, default `true`, im Profil konfigurierbar) + `savedTabUrls` (List).
+  * Beim Schließen: offene URLs speichern. Beim Öffnen: Tabs wiederherstellen (nur wenn `restoreTabs=true`).
+* [ ] **Story 6.6: Tab-Close-Button-Fix**
+ * `setTitleAt()` in `onTitleChanged` entfernt (überschrieb custom tab component).
+ * Tab-Wechsel-Listener für automatischen Fokus.
+* [ ] **Story 6.7: Automatische Fokussierung**
+ * Neuer Browser-Tab → URL-Leiste fokussiert.
+ * File-Transfer-Tab → linke Seite, erstes File.
+ * SSH-Tab → JediTerm.
+ * Tab-Wechsel → jeweiliger Content fokussiert.

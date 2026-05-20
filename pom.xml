@@ -106,6 +106,13 @@
 			<version>5.23.0</version>
 			<scope>test</scope>
 		</dependency>
+		<!-- JCEF (Java Chromium Embedded Framework) – optional browser backend -->
+		<!-- Natives are loaded at runtime via jcefmaven loader                  -->
+		<dependency>
+			<groupId>me.friwi</groupId>
+			<artifactId>jcefmaven</artifactId>
+			<version>146.0.10</version>
+		</dependency>
 	</dependencies>
 	<build>
 		<plugins>

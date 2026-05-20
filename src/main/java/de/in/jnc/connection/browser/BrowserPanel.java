@@ -3,6 +3,8 @@ package de.in.jnc.connection.browser;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.function.Consumer;
 
 import javax.swing.JButton;
@@ -17,6 +19,7 @@ import org.apache.logging.log4j.Logger;
 import de.in.jnc.connection.browser.backend.BrowserBackend;
 import de.in.jnc.connection.browser.backend.BrowserBackendType;
 import de.in.jnc.connection.browser.backend.JavaFXWebViewBackend;
+import de.in.jnc.connection.browser.backend.jcef.JCEFBackend;
 
 /**
  * A Swing {@link JPanel} that embeds a browser engine via a
@@ -134,13 +137,17 @@ public class BrowserPanel extends JPanel {
     }
 
     /**
-     * Creates a new browser panel with the default backend (JavaFX WebView)
+     * Creates a new browser panel with the default backend (JCEF / Chromium)
      * and loads the given URL.
+     * <p>
+     * JCEF is the default because it provides a modern Chromium engine that
+     * can render complex SPAs like the Keycloak Admin Console, which JavaFX
+     * WebView (WebKit ~615.1) cannot.
      *
      * @param url the initial URL to load (may be {@code "about:blank"})
      */
     public BrowserPanel(String url) {
-        this(url, BrowserBackendType.JAVAFX_WEBVIEW);
+        this(url, BrowserBackendType.JCEF);
     }
 
     /**
@@ -182,6 +189,15 @@ public class BrowserPanel extends JPanel {
         this.backend = createBackend(type, url);
         add(backend.getViewComponent(), BorderLayout.CENTER);
 
+        // ── Focus: prevent CEF from grabbing focus on creation ────────
+        // In JCEF windowed mode, CefBrowserWr asynchronously calls
+        // setFocus(true) via a 100ms Timer during browser parenting.
+        // A double invokeLater defers our releaseFocus() until after
+        // CEF's Timer action has run, so our call is the last one.
+        SwingUtilities.invokeLater(() -> {
+            SwingUtilities.invokeLater(backend::releaseFocus);
+        });
+
         // ── Wire Swing navigation buttons ──────────────────────────────
         backBtn.addActionListener(e -> backend.goBack());
         forwardBtn.addActionListener(e -> backend.goForward());
@@ -199,19 +215,46 @@ public class BrowserPanel extends JPanel {
             backend.loadUrl(input);
         });
 
+        // ── Focus coordination for JCEF windowed mode ──────────────────
+        // Official JCEF pattern (from CefBrowserWr / CefBrowser_N):
+        //   setFocus(true)  → canvas.setFocusable(true) + requestFocus()
+        //   setFocus(false) → canvas.setFocusable(false)
+        //
+        // When the Canvas is NOT focusable, keyboard events flow to Swing
+        // components. When it IS focusable, events go to the CEF browser.
+        //
+        // We use mouse listeners to toggle focusability:
+        //   - Click on toolbar (URL bar, buttons) → release CEF focus
+        //   - Click on browser view area           → request CEF focus
+        MouseAdapter swingFocusHandler = new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                backend.releaseFocus();
+            }
+        };
+        urlField.addMouseListener(swingFocusHandler);
+        backBtn.addMouseListener(swingFocusHandler);
+        forwardBtn.addMouseListener(swingFocusHandler);
+        refreshBtn.addMouseListener(swingFocusHandler);
+
+        backend.getViewComponent().addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                backend.requestFocus();
+            }
+        });
+
         // ── Wire callbacks ─────────────────────────────────────────────
         backend.setLocationListener(this::onLocationChanged);
         backend.setTitleListener(this::onTitleChanged);
 
-        // If the backend is JavaFXWebViewBackend, wire the credentials callback
-        if (backend instanceof JavaFXWebViewBackend) {
-            ((JavaFXWebViewBackend) backend).setCredentialsCallback(
-                    valueInserter -> {
-                        if (credentialsCallback != null) {
-                            credentialsCallback.accept(valueInserter);
-                        }
-                    });
-        }
+        // Wire the credentials callback (supported by all backends)
+        backend.setCredentialsCallback(
+                valueInserter -> {
+                    if (credentialsCallback != null) {
+                        credentialsCallback.accept(valueInserter);
+                    }
+                });
     }
 
     /**
@@ -220,8 +263,7 @@ public class BrowserPanel extends JPanel {
     private static BrowserBackend createBackend(BrowserBackendType type, String url) {
         return switch (type) {
             case JAVAFX_WEBVIEW -> new JavaFXWebViewBackend(url);
-            case JCEF -> throw new UnsupportedOperationException(
-                    "JCEF backend not yet implemented");
+            case JCEF -> new JCEFBackend(url);
         };
     }
 

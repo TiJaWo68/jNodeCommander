@@ -6,6 +6,7 @@ import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
@@ -44,9 +45,15 @@ public class CertificateTrustManager implements X509TrustManager {
 
     /**
      * Optional target URL for context in the warning dialog.
-     * Set per-connection by the caller if available.
+     * <p>
+     * Uses {@link AtomicReference} instead of {@link ThreadLocal} because the
+     * URL is set on the JavaFX Application Thread (by
+     * {@link de.in.jnc.connection.browser.backend.JavaFXWebViewBackend#initialize}),
+     * but the SSL handshake (and thus {@link #checkServerTrusted}) runs on a
+     * different thread ({@code HttpClient-1-Worker-*}).  A {@code ThreadLocal}
+     * would be invisible across threads.
      */
-    private static final ThreadLocal<String> pendingTargetUrl = new ThreadLocal<>();
+    private static final AtomicReference<String> pendingTargetUrl = new AtomicReference<>();
 
     /**
      * Sets the target URL for the current thread's SSL handshake context.
@@ -134,14 +141,14 @@ public class CertificateTrustManager implements X509TrustManager {
 
     // ── Session cache ─────────────────────────────────────────────────
 
-    private static boolean isAlreadyAccepted(X509Certificate[] chain) {
+    static boolean isAlreadyAccepted(X509Certificate[] chain) {
         if (chain == null || chain.length == 0) {
             return false;
         }
         return acceptedCertificates.contains(fingerprint(chain[0]));
     }
 
-    private static void rememberAccepted(X509Certificate[] chain) {
+    static void rememberAccepted(X509Certificate[] chain) {
         if (chain != null && chain.length > 0) {
             acceptedCertificates.add(fingerprint(chain[0]));
         }
@@ -150,7 +157,7 @@ public class CertificateTrustManager implements X509TrustManager {
     /**
      * Extracts the hostname from a URL string.
      */
-    private static String extractHostname(String url) {
+    static String extractHostname(String url) {
         if (url == null || url.isEmpty()) {
             return "unknown";
         }
@@ -171,7 +178,7 @@ public class CertificateTrustManager implements X509TrustManager {
     /**
      * Computes a unique fingerprint (SHA-256 hex) for a certificate.
      */
-    private static String fingerprint(X509Certificate cert) {
+    static String fingerprint(X509Certificate cert) {
         try {
             java.security.MessageDigest md =
                     java.security.MessageDigest.getInstance("SHA-256");
@@ -203,11 +210,17 @@ public class CertificateTrustManager implements X509TrustManager {
             sc.init(null, new TrustManager[]{ctm}, new java.security.SecureRandom());
             SSLContext.setDefault(sc);
 
+            // Save the ORIGINAL hostname verifier BEFORE we replace it,
+            // otherwise PromptingHostnameVerifier would recursively call
+            // itself via getDefaultHostnameVerifier().
+            javax.net.ssl.HostnameVerifier originalVerifier =
+                    javax.net.ssl.HttpsURLConnection.getDefaultHostnameVerifier();
+
             // Also set on HttpsURLConnection as a fallback
             javax.net.ssl.HttpsURLConnection.setDefaultSSLSocketFactory(
                     sc.getSocketFactory());
             javax.net.ssl.HttpsURLConnection.setDefaultHostnameVerifier(
-                    new PromptingHostnameVerifier());
+                    new PromptingHostnameVerifier(originalVerifier));
         } catch (Exception e) {
             LOGGER.error("Failed to install CertificateTrustManager", e);
         }
@@ -221,19 +234,42 @@ public class CertificateTrustManager implements X509TrustManager {
 
         private static final Set<String> acceptedHostnames = ConcurrentHashMap.newKeySet();
 
+        private final javax.net.ssl.HostnameVerifier originalVerifier;
+
+        PromptingHostnameVerifier(javax.net.ssl.HostnameVerifier originalVerifier) {
+            this.originalVerifier = originalVerifier;
+        }
+
         @Override
         public boolean verify(String hostname, SSLSession session) {
-            // First try the default verifier
-            javax.net.ssl.HostnameVerifier defaultVerifier =
-                    javax.net.ssl.HttpsURLConnection.getDefaultHostnameVerifier();
-            if (defaultVerifier != null && defaultVerifier.verify(hostname, session)) {
+            // First try the original (pre-installation) default verifier
+            if (originalVerifier != null
+                    && originalVerifier.verify(hostname, session)) {
                 return true;
             }
 
-            // Check cache
+            // Check hostname cache
             String key = hostname + "|" + session.getPeerHost();
             if (acceptedHostnames.contains(key)) {
                 return true;
+            }
+
+            // Also check if the certificate was already accepted by
+            // checkServerTrusted() via isAlreadyAccepted(). This prevents
+            // the dialog from appearing twice – once for hostname
+            // verification and once for trust verification.
+            try {
+                java.security.cert.Certificate[] certs = session.getPeerCertificates();
+                X509Certificate[] chain = Arrays.copyOf(certs, certs.length,
+                        X509Certificate[].class);
+                if (isAlreadyAccepted(chain)) {
+                    // Certificate already approved by checkServerTrusted,
+                    // accept the hostname too.
+                    acceptedHostnames.add(key);
+                    return true;
+                }
+            } catch (Exception e) {
+                LOGGER.debug("Failed to check certificate cache in hostname verifier", e);
             }
 
             // Prompt user via certificate dialog
@@ -247,6 +283,9 @@ public class CertificateTrustManager implements X509TrustManager {
                         url != null ? url : "https://" + hostname);
                 if (accepted) {
                     acceptedHostnames.add(key);
+                    // Also add to the trust manager's certificate cache so
+                    // checkServerTrusted() does not show the dialog again.
+                    rememberAccepted(chain);
                     return true;
                 }
             } catch (Exception e) {
@@ -254,6 +293,29 @@ public class CertificateTrustManager implements X509TrustManager {
             }
             return false;
         }
+    }
+
+    // ── Test support ──────────────────────────────────────────────────
+
+    /**
+     * Returns the current pending target URL for testing purposes.
+     * <p>
+     * This method exists only to verify the cross-thread visibility of
+     * {@link #pendingTargetUrl} in unit tests.  It is intentionally
+     * package-private (not part of the public API).
+     */
+    static String getPendingTargetUrlForTest() {
+        return pendingTargetUrl.get();
+    }
+
+    /**
+     * Clears the session-acceptance cache for testing purposes.
+     * <p>
+     * This ensures isolation between unit tests that call
+     * {@link #rememberAccepted(X509Certificate[])}.
+     */
+    static void resetAcceptedCertificatesForTest() {
+        acceptedCertificates.clear();
     }
 
 }

@@ -34,18 +34,16 @@ import com.jediterm.terminal.ui.TerminalPanel;
 import com.jediterm.terminal.ui.settings.SettingsProvider;
 
 import de.in.jnc.ConnectionProfile;
-import de.in.jnc.GlobalSettings;
 import de.in.jnc.ProfileManager;
 import de.in.jnc.connection.browser.BrowserTabManager;
 import de.in.jnc.connection.browser.Endpoint;
 import de.in.jnc.connection.browser.EndpointPopupMenu;
 import de.in.jnc.connection.browser.K8sEndpointDiscoverer;
-import de.in.jnc.connection.ChromeTabbedPaneUI;
 import de.in.jnc.connection.browser.PortForwardManager;
 import de.in.jnc.connection.filetransfer.FileTransferPanel;
 import de.in.jnc.connection.filetransfer.SftpService;
-import de.in.jnc.terminal.DynamicSettingsProvider;
 import de.in.jnc.terminal.CredentialsService;
+import de.in.jnc.terminal.DynamicSettingsProvider;
 import de.in.jnc.terminal.JncActionProvider;
 import de.in.jnc.terminal.SshConnection;
 import de.in.jnc.terminal.SshTtyConnector;
@@ -168,8 +166,7 @@ public class ConnectionFrame extends JFrame {
 		credentialsService.initialize(sshConnection);
 
 		// ── Custom Context Menu: Credentials (Story 4.1) ───────────────
-		JncActionProvider jncActionProvider = new JncActionProvider(
-				credentialsService, this::insertTextAtCursor);
+		JncActionProvider jncActionProvider = new JncActionProvider(credentialsService, this::insertTextAtCursor);
 		terminalWidget.setNextProvider(jncActionProvider);
 
 		FlatSVGIcon terminalIcon = new FlatSVGIcon("terminal.svg", 16, 16);
@@ -184,8 +181,7 @@ public class ConnectionFrame extends JFrame {
 
 		// ── Browser Tab Manager ──────────────────────────────────────────
 		browserTabManager = new BrowserTabManager(tabbedPane);
-		browserTabManager.setCredentialsCallback(valueInserter ->
-				credentialsService.showCredentialsDialog(this, valueInserter));
+		browserTabManager.setCredentialsCallback(valueInserter -> credentialsService.showCredentialsDialog(this, valueInserter));
 
 		// ── Web Apps Discovery (Story 3.3.2) ─────────────────────────────
 		endpointDiscoverer = new K8sEndpointDiscoverer(sshConnection);
@@ -250,7 +246,7 @@ public class ConnectionFrame extends JFrame {
 		}
 
 		try {
-			terminalWidget.stop();
+			terminalWidget.close();
 		} catch (Exception e) {
 			LOGGER.warn("Error stopping terminal widget: {}", e.getMessage());
 		}
@@ -380,8 +376,7 @@ public class ConnectionFrame extends JFrame {
 	// ─── Story 4.1: Terminal Context Menu Extensions ────────────────────
 
 	/**
-	 * Writes the given text to the terminal's SSH shell channel,
-	 * effectively inserting it at the cursor position.
+	 * Writes the given text to the terminal's SSH shell channel, effectively inserting it at the cursor position.
 	 */
 	private void insertTextAtCursor(String text) {
 		try {
@@ -394,8 +389,7 @@ public class ConnectionFrame extends JFrame {
 	/**
 	 * Opens the per-profile terminal settings dialog (modal).
 	 * <p>
-	 * If the connection has an associated profile, the override is saved
-	 * back to the profile. The terminal widget is <b>not</b> automatically
+	 * If the connection has an associated profile, the override is saved back to the profile. The terminal widget is <b>not</b> automatically
 	 * refreshed — the settings take effect on the next connection.
 	 */
 	private void showTerminalSettingsDialog() {

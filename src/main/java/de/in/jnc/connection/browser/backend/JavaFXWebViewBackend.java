@@ -1,5 +1,7 @@
 package de.in.jnc.connection.browser.backend;
 
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
@@ -146,14 +148,15 @@ public class JavaFXWebViewBackend implements BrowserBackend {
 
         engine.getLoadWorker().stateProperty().addListener(
                 (obs, oldState, newState) -> {
-                    if (newState == Worker.State.FAILED && !sslRetryAttempted.get()) {
+                    if (newState == Worker.State.FAILED) {
                         Throwable error = engine.getLoadWorker().getException();
                         String failedUrl = engine.getLocation();
                         LOGGER.warn("WebEngine load FAILED for '{}': {}",
                                 failedUrl, error != null ? error.getMessage() : "unknown");
 
-                        if (error != null && isLikelySslError(error)) {
-                            sslRetryAttempted.set(true);
+                        // Only attempt ONE SSL retry to avoid infinite loops.
+                        if (error != null && isLikelySslError(error)
+                                && sslRetryAttempted.compareAndSet(false, true)) {
                             LOGGER.info("SSL-related load failure detected, "
                                     + "attempting retry via HttpsURLConnection...");
 
@@ -225,6 +228,7 @@ public class JavaFXWebViewBackend implements BrowserBackend {
      * with a credential value, injects that value into the currently focused
      * input field on the web page via JavaScript.
      */
+    @Override
     public void setCredentialsCallback(Consumer<Consumer<String>> callback) {
         this.credentialsCallback = callback;
     }
@@ -349,6 +353,17 @@ public class JavaFXWebViewBackend implements BrowserBackend {
     }
 
     @Override
+    public void releaseFocus() {
+        // JavaFX WebView does not have the heavyweight keyboard-capture
+        // issue that JCEF windowed mode has. No action needed.
+    }
+
+    @Override
+    public void requestFocus() {
+        // JavaFX WebView does not need explicit focus management. No-op.
+    }
+
+    @Override
     public boolean isInitialized() {
         return initialized;
     }
@@ -402,7 +417,7 @@ public class JavaFXWebViewBackend implements BrowserBackend {
 
     // ── SSL error retry ────────────────────────────────────────────────
 
-    private static boolean isLikelySslError(Throwable error) {
+    static boolean isLikelySslError(Throwable error) {
         if (error == null) {
             return false;
         }
@@ -415,7 +430,10 @@ public class JavaFXWebViewBackend implements BrowserBackend {
                 || lower.contains("handshake")
                 || lower.contains("certificate")
                 || lower.contains("trust")
-                || lower.contains("untrusted");
+                || lower.contains("untrusted")
+                || lower.contains("timeout")
+                || lower.contains("timed out")
+                || lower.contains("unknown");
     }
 
     private void attemptSslRetry(String targetUrl, WebEngine engine) {
@@ -429,23 +447,92 @@ public class JavaFXWebViewBackend implements BrowserBackend {
 
             de.in.jnc.connection.browser.CertificateTrustManager.setTargetUrl(targetUrl);
 
+            // Open a JDK HttpsURLConnection WITHOUT following redirects.
+            // We only need the SSL handshake to complete (which triggers
+            // checkServerTrusted -> CertificateWarningDialog -> cert
+            // accepted -> CertificateStoreManager.importAcceptedCertificate
+            // -> certificate imported into Windows store).
+            //
+            // After the cert is in the Windows store, we reload the
+            // ORIGINAL URL via engine.load(initialUrl) and let WebView
+            // handle the full redirect chain natively.  This preserves
+            // proper window.location, cookies, WebSockets, and the
+            // Keycloak auth flow – essential for SPAs like the Admin
+            // Console that would hang if loaded at a redirect target
+            // without the proper authentication state.
             java.net.URL urlObj = new java.net.URL(targetUrl);
             HttpsURLConnection conn = (HttpsURLConnection) urlObj.openConnection();
             conn.setConnectTimeout(10_000);
             conn.setReadTimeout(10_000);
-            conn.setInstanceFollowRedirects(true);
+            conn.setInstanceFollowRedirects(false);
 
             int responseCode = conn.getResponseCode();
             LOGGER.info("SSL retry: HttpsURLConnection returned {} for {}",
                     responseCode, targetUrl);
 
-            final String finalUrl = conn.getURL().toExternalForm();
-            Platform.runLater(() -> {
-                LOGGER.info("SSL retry: reloading WebView with {}", finalUrl);
-                engine.load(finalUrl);
-            });
+            // Consume the response body so the full handshake and
+            // certificate import (Windows store via PowerShell .NET API)
+            // complete before we proceed.
+            try (InputStream is = conn.getInputStream()) {
+                byte[] buf = new byte[8192];
+                while (is.read(buf) != -1) {
+                    // discard – the JDK handshake already triggered the import
+                }
+            }
 
             conn.disconnect();
+
+            // Small delay to let the Windows cert store propagate
+            try {
+                Thread.sleep(200);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+            }
+
+            // Reload the TARGET URL that failed (not initialUrl, which may be
+            // "about:blank" when the user navigated via loadUrl()).  The
+            // certificate is now in the Windows store, so WebView's native
+            // Schannel stack trusts it and will load the page properly with
+            // correct window.location, cookies, and the full redirect chain.
+            //
+            // IMPORTANT: engine.load() creates a NEW LoadWorker internally.
+            // The state/exception listeners registered during initialize()
+            // are on the OLD worker and will NOT fire for the new load.
+            // Therefore we attach transient listeners here to monitor the
+            // retry outcome.
+            Platform.runLater(() -> {
+                engine.getLoadWorker().cancel();
+                engine.load(targetUrl);
+
+                // Transient listener for the retry's LoadWorker.
+                // The old listener (from initialize()) is attached to the
+                // previous worker and won't see this new worker's state.
+                engine.getLoadWorker().stateProperty().addListener(
+                        new javafx.beans.value.ChangeListener<>() {
+                            @Override
+                            public void changed(
+                                    javafx.beans.value.ObservableValue<
+                                            ? extends Worker.State> obs,
+                                    Worker.State oldState,
+                                    Worker.State newState) {
+                                if (newState == Worker.State.FAILED) {
+                                    Throwable err = engine.getLoadWorker()
+                                            .getException();
+                                    LOGGER.warn("SSL retry: reload FAILED "
+                                            + "for '{}': {}",
+                                            targetUrl,
+                                            err != null
+                                                    ? err.getMessage()
+                                                    : "unknown");
+                                } else if (newState
+                                        == Worker.State.SUCCEEDED) {
+                                    LOGGER.info("SSL retry: reload "
+                                            + "SUCCEEDED for '{}'",
+                                            targetUrl);
+                                }
+                            }
+                        });
+            });
         } catch (javax.net.ssl.SSLHandshakeException e) {
             LOGGER.warn("SSL retry: user rejected certificate for {}", targetUrl);
         } catch (java.net.SocketTimeoutException e) {
