@@ -2,10 +2,10 @@ package de.in.jnc.connection.browser;
 
 import java.awt.Component;
 import java.awt.Dimension;
-import java.awt.FlowLayout;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
@@ -14,303 +14,320 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTabbedPane;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
 import com.formdev.flatlaf.extras.FlatSVGIcon;
 
 import de.in.jnc.connection.ChromeTabbedPaneUI;
-
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import de.in.jnc.connection.browser.BrowserPanel.NewTabCallback;
 
 /**
  * Manages dynamic browser tabs within a {@link JTabbedPane}.
  * <p>
- * Provides open-by-URL semantics: if a URL is already open in a browser tab,
- * that tab is selected instead of creating a duplicate. Also supports opening
- * a fresh empty tab via {@link #openNewTab()}.
+ * Provides open-by-URL semantics: if a URL is already open in a browser tab, that tab is selected instead of creating a duplicate. Also
+ * supports opening a fresh empty tab via {@link #openNewTab()}.
  * <p>
- * The first two tab positions (0 = Terminal, 1 = File Transfer) are reserved
- * as pinned tabs and are not managed by this class.
+ * The first two tab positions (0 = Terminal, 1 = File Transfer) are reserved as pinned tabs and are not managed by this class.
  */
 public class BrowserTabManager {
 
-    private static final Logger LOGGER = LogManager.getLogger(BrowserTabManager.class);
-    private static final int FIRST_BROWSER_TAB_INDEX = 2;
+	private static final Logger LOGGER = LogManager.getLogger(BrowserTabManager.class);
+	private static final int FIRST_BROWSER_TAB_INDEX = 2;
 
-    private final JTabbedPane tabbedPane;
-    private final Map<String, BrowserPanel> urlToPanel;
-    private int tabCounter;
-    private Consumer<Consumer<String>> credentialsCallback;
+	private final JTabbedPane tabbedPane;
+	private final Map<String, BrowserPanel> urlToPanel;
+	private int tabCounter;
+	private Consumer<Consumer<String>> credentialsCallback;
+	private Runnable bookmarkCallback;
+	private Consumer<String> historyCallback;
 
-    /**
-     * Creates a new manager bound to the given tabbed pane.
-     *
-     * @param tabbedPane the tabbed pane of a {@code ConnectionFrame}
-     */
-    public BrowserTabManager(JTabbedPane tabbedPane) {
-        this.tabbedPane = tabbedPane;
-        this.urlToPanel = new HashMap<>();
-        this.tabCounter = 0;
-    }
+	/**
+	 * Creates a new manager bound to the given tabbed pane.
+	 *
+	 * @param tabbedPane the tabbed pane of a {@code ConnectionFrame}
+	 */
+	public BrowserTabManager(JTabbedPane tabbedPane) {
+		this.tabbedPane = tabbedPane;
+		this.urlToPanel = new HashMap<>();
+		this.tabCounter = 0;
+	}
 
-    /**
-     * Opens the given URL in a browser tab.
-     * <p>
-     * If a tab with this URL is already open, it is selected and brought to
-     * front. Otherwise a new browser tab is created, added to the tabbed pane,
-     * and selected.
-     *
-     * @param url         the URL to open
-     * @param displayName the initial tab label
-     */
-    public void openUrl(String url, String displayName) {
-        // Normalise: strip trailing slash for map lookup
-        String key = normaliseUrl(url);
+	/**
+	 * Opens the given URL in a browser tab.
+	 * <p>
+	 * If a tab with this URL is already open, it is selected and brought to front. Otherwise a new browser tab is created, added to the tabbed
+	 * pane, and selected.
+	 *
+	 * @param url         the URL to open
+	 * @param displayName the initial tab label
+	 */
+	public void openUrl(String url, String displayName) {
+		// Normalise: strip trailing slash for map lookup
+		String key = normaliseUrl(url);
 
-        BrowserPanel existing = urlToPanel.get(key);
-        if (existing != null) {
-            // Tab already exists → select it
-            int index = tabbedPane.indexOfComponent(existing);
-            if (index >= 0) {
-                tabbedPane.setSelectedIndex(index);
-                LOGGER.debug("Re-selected existing browser tab for URL: {}", url);
-                return;
-            }
-            // Panel was removed from tabbed pane but still in map – clean up
-            urlToPanel.remove(key);
-        }
+		BrowserPanel existing = urlToPanel.get(key);
+		if (existing != null) {
+			// Tab already exists → select it
+			int index = tabbedPane.indexOfComponent(existing);
+			if (index >= 0) {
+				tabbedPane.setSelectedIndex(index);
+				LOGGER.debug("Re-selected existing browser tab for URL: {}", url);
+				return;
+			}
+			// Panel was removed from tabbed pane but still in map – clean up
+			urlToPanel.remove(key);
+		}
 
-        // Create new browser tab
-        BrowserPanel panel = new BrowserPanel(url);
-        panel.setNewTabCallback(this::openUrlInNewTab);
-        panel.setTitleCallback(title -> onTitleChanged(panel, title));
-        panel.setCredentialsCallback(credentialsCallback);
+		// Create new browser tab
+		BrowserPanel panel = new BrowserPanel(url);
+		panel.setNewTabCallback(this::openUrlInNewTab);
+		panel.setTitleCallback(title -> onTitleChanged(panel, title));
+		panel.setCredentialsCallback(credentialsCallback);
+		panel.setBookmarkCallback(bookmarkCallback);
+		panel.setHistoryCallback(historyCallback);
 
-        urlToPanel.put(key, panel);
+		urlToPanel.put(key, panel);
 
-        String tabTitle = (displayName != null && !displayName.isEmpty())
-                ? displayName
-                : "Browser";
+		String tabTitle = (displayName != null && !displayName.isEmpty()) ? displayName : "Browser";
 
-        tabbedPane.addTab(tabTitle, panel);
-        int newIndex = tabbedPane.indexOfComponent(panel);
-        installTabCloseButton(newIndex, tabTitle, panel);
-        tabbedPane.setSelectedIndex(newIndex);
+		tabbedPane.addTab(tabTitle, panel);
+		int newIndex = tabbedPane.indexOfComponent(panel);
+		installTabCloseButton(newIndex, tabTitle, panel);
+		tabbedPane.setSelectedIndex(newIndex);
 
-        LOGGER.debug("Opened new browser tab [{}] for URL: {}", tabTitle, url);
-    }
+		LOGGER.debug("Opened new browser tab [{}] for URL: {}", tabTitle, url);
+	}
 
-    /**
-     * Opens a fresh empty browser tab with a blank page.
-     * <p>
-     * Unlike {@link #openUrl(String, String)}, this always creates a new tab
-     * and never reuses an existing one.
-     */
-    public void openNewTab() {
-        tabCounter++;
-        String tabTitle = "New Tab " + tabCounter;
+	/**
+	 * Opens a fresh empty browser tab with a blank page.
+	 * <p>
+	 * Unlike {@link #openUrl(String, String)}, this always creates a new tab and never reuses an existing one.
+	 */
+	public void openNewTab() {
+		tabCounter++;
+		String tabTitle = "New Tab " + tabCounter;
 
-        BrowserPanel panel = new BrowserPanel("about:blank");
-        panel.setNewTabCallback(this::openUrlInNewTab);
-        panel.setTitleCallback(title -> onTitleChanged(panel, title));
-        panel.setCredentialsCallback(credentialsCallback);
+		BrowserPanel panel = new BrowserPanel("about:blank");
+		panel.setNewTabCallback(this::openUrlInNewTab);
+		panel.setTitleCallback(title -> onTitleChanged(panel, title));
+		panel.setCredentialsCallback(credentialsCallback);
+		panel.setBookmarkCallback(bookmarkCallback);
+		panel.setHistoryCallback(historyCallback);
 
-        tabbedPane.addTab(tabTitle, panel);
-        int newIndex = tabbedPane.indexOfComponent(panel);
-        installTabCloseButton(newIndex, tabTitle, panel);
-        tabbedPane.setSelectedIndex(newIndex);
+		tabbedPane.addTab(tabTitle, panel);
+		int newIndex = tabbedPane.indexOfComponent(panel);
+		installTabCloseButton(newIndex, tabTitle, panel);
+		tabbedPane.setSelectedIndex(newIndex);
 
-        LOGGER.debug("Opened new empty browser tab [{}]", tabTitle);
-    }
+		LOGGER.debug("Opened new empty browser tab [{}]", tabTitle);
+	}
 
-    /**
-     * Closes the browser tab at the given index and releases its resources.
-     * <p>
-     * Tabs at index 0 (Terminal) and 1 (File Transfer) are pinned and cannot
-     * be closed through this method.
-     *
-     * @param tabIndex the tab index to close
-     */
-    public void closeTab(int tabIndex) {
-        if (tabIndex < FIRST_BROWSER_TAB_INDEX || tabIndex >= tabbedPane.getTabCount()) {
-            return; // pinned tabs or out of range
-        }
-        Component component = tabbedPane.getComponentAt(tabIndex);
-        if (component instanceof BrowserPanel panel) {
-            removeFromMap(panel);
-            tabbedPane.remove(tabIndex);
-            panel.dispose();
-            LOGGER.debug("Closed browser tab at index {}", tabIndex);
-        }
-    }
+	/**
+	 * Closes the browser tab at the given index and releases its resources.
+	 * <p>
+	 * Tabs at index 0 (Terminal) and 1 (File Transfer) are pinned and cannot be closed through this method.
+	 *
+	 * @param tabIndex the tab index to close
+	 */
+	public void closeTab(int tabIndex) {
+		if (tabIndex < FIRST_BROWSER_TAB_INDEX || tabIndex >= tabbedPane.getTabCount()) {
+			return; // pinned tabs or out of range
+		}
+		Component component = tabbedPane.getComponentAt(tabIndex);
+		if (component instanceof BrowserPanel panel) {
+			removeFromMap(panel);
+			tabbedPane.remove(tabIndex);
+			panel.dispose();
+			LOGGER.debug("Closed browser tab at index {}", tabIndex);
+		}
+	}
 
-    /**
-     * Closes all browser tabs and releases their resources.
-     * <p>
-     * Called when the ConnectionFrame is being closed. Pinned tabs (0 and 1)
-     * are not affected.
-     */
-    public void closeAll() {
-        LOGGER.debug("Closing all browser tabs");
-        urlToPanel.clear();
-        // Iterate backwards to avoid index shifting
-        for (int i = tabbedPane.getTabCount() - 1; i >= FIRST_BROWSER_TAB_INDEX; i--) {
-            Component component = tabbedPane.getComponentAt(i);
-            if (component instanceof BrowserPanel panel) {
-                tabbedPane.remove(i);
-                panel.dispose();
-            }
-        }
-    }
+	/**
+	 * Closes all browser tabs and releases their resources.
+	 * <p>
+	 * Called when the ConnectionFrame is being closed. Pinned tabs (0 and 1) are not affected.
+	 */
+	public void closeAll() {
+		LOGGER.debug("Closing all browser tabs");
+		urlToPanel.clear();
+		// Iterate backwards to avoid index shifting
+		for (int i = tabbedPane.getTabCount() - 1; i >= FIRST_BROWSER_TAB_INDEX; i--) {
+			Component component = tabbedPane.getComponentAt(i);
+			if (component instanceof BrowserPanel panel) {
+				tabbedPane.remove(i);
+				panel.dispose();
+			}
+		}
+	}
 
-    /**
-     * Sets the credentials callback that will be passed to every new
-     * {@link BrowserPanel}. The callback is invoked when the user selects
-     * "Credentials..." from the browser's right-click context menu.
-     *
-     * @param callback the credentials callback, or {@code null} to disable
-     */
-    public void setCredentialsCallback(Consumer<Consumer<String>> callback) {
-        this.credentialsCallback = callback;
-    }
+	/**
+	 * Sets the credentials callback that will be passed to every new {@link BrowserPanel}. The callback is invoked when the user selects
+	 * "Credentials..." from the browser's right-click context menu.
+	 *
+	 * @param callback the credentials callback, or {@code null} to disable
+	 */
+	public void setCredentialsCallback(Consumer<Consumer<String>> callback) {
+		this.credentialsCallback = callback;
+	}
 
-    // ── Internal helpers ──────────────────────────────────────────────
+	/**
+	 * Sets a callback invoked on Ctrl+D to bookmark the current URL.
+	 */
+	public void setBookmarkCallback(Runnable callback) {
+		this.bookmarkCallback = callback;
+	}
 
-    /**
-     * Installs a custom tab component with a browser icon, title label,
-     * and a close ("✕") button.
-     * <p>
-     * The close button uses the panel reference to find the correct tab index
-     * even when other tabs have been opened or closed in the meantime.
-     * A {@link MouseAdapter} on the panel ensures reliable tab selection on
-     * click (works around custom component event-consumption issues).
-     */
-    private void installTabCloseButton(int tabIndex, String title, BrowserPanel panel) {
-    	// Custom tab component with max-width cap (Chrome-like behavior)
-    	JPanel tabComponent = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0)) {
-    		@Override
-    		public Dimension getPreferredSize() {
-    			Dimension pref = super.getPreferredSize();
-    			pref.width = Math.min(pref.width, ChromeTabbedPaneUI.MAX_TAB_WIDTH);
-    			return pref;
-    		}
-    	};
-    	tabComponent.setOpaque(false);
+	/**
+	 * Sets a callback for URL history tracking.
+	 */
+	public void setHistoryCallback(Consumer<String> callback) {
+		this.historyCallback = callback;
+	}
 
-    	// Browser icon
-    	FlatSVGIcon browserIcon = new FlatSVGIcon("globe.svg", 16, 16);
-    	JLabel iconLabel = new JLabel(browserIcon);
-    	iconLabel.setToolTipText(title);
-    	tabComponent.add(iconLabel);
+	/**
+	 * Returns the URLs of all currently open browser tabs. Used for session restore (Story 6.5).
+	 *
+	 * @return a list of URLs, may be empty
+	 */
+	public List<String> getOpenUrls() {
+		List<String> urls = new java.util.ArrayList<>();
+		for (int i = FIRST_BROWSER_TAB_INDEX; i < tabbedPane.getTabCount(); i++) {
+			Component comp = tabbedPane.getComponentAt(i);
+			if (comp instanceof BrowserPanel panel) {
+				// The URL is in the toolbar's text field
+				// We access it indirectly via the panel's location callback
+				// Simplest approach: iterate urlToPanel values
+			}
+		}
+		// Use the urlToPanel map keys (normalised URLs)
+		urls.addAll(urlToPanel.keySet());
+		return urls;
+	}
 
-    	// Title label with constrained width so text does not overflow the close button
-    	JLabel label = new JLabel(title) {
-    		@Override
-    		public Dimension getPreferredSize() {
-    			Dimension pref = super.getPreferredSize();
-    			// Reserve space for icon (16), close button (~24), gaps (2+2), margin (4)
-    			int maxLabelWidth = ChromeTabbedPaneUI.MAX_TAB_WIDTH - 16 - 24 - 8;
-    			pref.width = Math.min(pref.width, maxLabelWidth);
-    			return pref;
-    		}
-    	};
-    	label.setToolTipText(title);
-    	tabComponent.add(label);
+	// ── Internal helpers ──────────────────────────────────────────────
 
-    	JButton closeBtn = new JButton("\u2715"); // ✕
-    	closeBtn.setBorderPainted(false);
-    	closeBtn.setContentAreaFilled(false);
-    	closeBtn.setFocusable(false);
-    	closeBtn.addActionListener(e -> {
-    		int idx = tabbedPane.indexOfComponent(panel);
-    		if (idx >= FIRST_BROWSER_TAB_INDEX) {
-    			closeTab(idx);
-    		}
-    	});
-    	tabComponent.add(closeBtn);
+	/**
+	 * Installs a custom tab component with a browser icon, title label, and a close ("✕") button.
+	 * <p>
+	 * The close button uses the panel reference to find the correct tab index even when other tabs have been opened or closed in the meantime.
+	 * A {@link MouseAdapter} on the panel ensures reliable tab selection on click (works around custom component event-consumption issues).
+	 */
+	private void installTabCloseButton(int tabIndex, String title, BrowserPanel panel) {
+		// BorderLayout: icon WEST, title CENTER, close button EAST
+		// This guarantees the close button is always visible regardless
+		// of title length — CENTER shrinks before EAST is pushed out.
+		JPanel tabComponent = new JPanel(new java.awt.BorderLayout(4, 0)) {
+			@Override
+			public Dimension getPreferredSize() {
+				Dimension pref = super.getPreferredSize();
+				pref.width = Math.min(pref.width, ChromeTabbedPaneUI.MAX_TAB_WIDTH) - 20;
+				return pref;
+			}
+		};
+		tabComponent.setOpaque(false);
 
-    	// ── Tab selection on click ─────────────────────────────────────
-    	// Mouse events on lightweight children (JLabel) do not always
-    	// propagate to the parent JTabbedPane. We add MouseAdapters on
-    	// ALL surfaces to ensure reliable tab selection:
-    	//   1. the tabComponent JPanel itself
-    	//   2. the icon JLabel
-    	//   3. the title JLabel
-    	MouseAdapter tabClickHandler = new MouseAdapter() {
-    		@Override
-    		public void mouseClicked(MouseEvent e) {
-    			int idx = tabbedPane.indexOfComponent(panel);
-    			if (idx >= 0) {
-    				tabbedPane.setSelectedIndex(idx);
-    			}
-    		}
-    	};
-    	tabComponent.addMouseListener(tabClickHandler);
-    	iconLabel.addMouseListener(tabClickHandler);
-    	label.addMouseListener(tabClickHandler);
+		// Browser icon (fallback globe, replaced by favicon in future)
+		FlatSVGIcon browserIcon = new FlatSVGIcon("globe.svg", 16, 16);
+		JLabel iconLabel = new JLabel(browserIcon);
+		iconLabel.setToolTipText(title);
+		tabComponent.add(iconLabel, java.awt.BorderLayout.WEST);
 
-    	tabbedPane.setTabComponentAt(tabIndex, tabComponent);
-    }
+		// Title label — CENTER fills remaining space, truncated by BorderLayout
+		JLabel label = new JLabel(title);
+		label.setToolTipText(title);
+		tabComponent.add(label, java.awt.BorderLayout.CENTER);
 
-    /**
-     * Callback for {@link NewTabCallback}. Derives a display name from the URL
-     * and delegates to {@link #openUrl(String, String)}.
-     */
-    private void openUrlInNewTab(String url) {
-        String displayName = url;
-        try {
-            // Extract hostname for a nicer default display name
-            if (url.startsWith("http://") || url.startsWith("https://")) {
-                String withoutProtocol = url.substring(url.indexOf("://") + 3);
-                int slashPos = withoutProtocol.indexOf('/');
-                displayName = (slashPos > 0) ? withoutProtocol.substring(0, slashPos) : withoutProtocol;
-                int colonPos = displayName.indexOf(':');
-                if (colonPos > 0) {
-                    displayName = displayName.substring(0, colonPos);
-                }
-            }
-        } catch (Exception ignored) {
-            // fallback: use raw URL
-        }
-        openUrl(url, displayName);
-    }
+		// Close button — always visible on the right
+		JButton closeBtn = new JButton("\u2715"); // ✕
+		closeBtn.setBorderPainted(false);
+		closeBtn.setContentAreaFilled(false);
+		closeBtn.setFocusable(false);
+		closeBtn.addActionListener(e -> {
+			int idx = tabbedPane.indexOfComponent(panel);
+			if (idx >= FIRST_BROWSER_TAB_INDEX) {
+				closeTab(idx);
+			}
+		});
+		tabComponent.add(closeBtn, java.awt.BorderLayout.EAST);
 
-    private void onTitleChanged(BrowserPanel panel, String title) {
-        int index = tabbedPane.indexOfComponent(panel);
-        if (index >= 0 && title != null && !title.isEmpty()) {
-            tabbedPane.setTitleAt(index, title);
-            // Also update the title in the custom tab component
-            Component tabComp = tabbedPane.getTabComponentAt(index);
-            if (tabComp instanceof JPanel panelWithLabel) {
-                for (Component child : panelWithLabel.getComponents()) {
-                    if (child instanceof JLabel label && label.getIcon() == null) {
-                        label.setText(title);
-                        label.setToolTipText(title);
-                        break;
-                    }
-                }
-            }
-        }
-    }
+		// ── Tab selection on click ─────────────────────────────────────
+		MouseAdapter tabClickHandler = new MouseAdapter() {
+			@Override
+			public void mouseClicked(MouseEvent e) {
+				int idx = tabbedPane.indexOfComponent(panel);
+				if (e.getButton() == MouseEvent.BUTTON2)
+					closeTab(idx);
+				else if (idx >= 0) {
+					tabbedPane.setSelectedIndex(idx);
+				}
+			}
+		};
+		tabComponent.addMouseListener(tabClickHandler);
+		iconLabel.addMouseListener(tabClickHandler);
+		label.addMouseListener(tabClickHandler);
 
-    private void removeFromMap(BrowserPanel panel) {
-        urlToPanel.entrySet()
-                .removeIf(entry -> entry.getValue() == panel);
-    }
+		tabbedPane.setTabComponentAt(tabIndex, tabComponent);
+	}
 
-    /**
-     * Normalises a URL for use as a map key.
-     * Strips trailing slashes to treat {@code "http://foo/"} and
-     * {@code "http://foo"} as the same.
-     */
-    private static String normaliseUrl(String url) {
-        if (url == null) {
-            return "";
-        }
-        String key = url.trim();
-        // Strip trailing slash (but keep "about:blank" as-is)
-        if (key.endsWith("/") && !key.equals("about:blank/")) {
-            key = key.substring(0, key.length() - 1);
-        }
-        return key;
-    }
+	/**
+	 * Callback for {@link NewTabCallback}. Derives a display name from the URL and delegates to {@link #openUrl(String, String)}.
+	 */
+	private void openUrlInNewTab(String url) {
+		String displayName = url;
+		try {
+			// Extract hostname for a nicer default display name
+			if (url.startsWith("http://") || url.startsWith("https://")) {
+				String withoutProtocol = url.substring(url.indexOf("://") + 3);
+				int slashPos = withoutProtocol.indexOf('/');
+				displayName = (slashPos > 0) ? withoutProtocol.substring(0, slashPos) : withoutProtocol;
+				int colonPos = displayName.indexOf(':');
+				if (colonPos > 0) {
+					displayName = displayName.substring(0, colonPos);
+				}
+			}
+		} catch (Exception ignored) {
+			// fallback: use raw URL
+		}
+		openUrl(url, displayName);
+	}
+
+	private void onTitleChanged(BrowserPanel panel, String title) {
+		int index = tabbedPane.indexOfComponent(panel);
+		if (index >= 0 && title != null && !title.isEmpty()) {
+			// Update the title label in the custom tab component only.
+			// Do NOT call setTitleAt() — it can overwrite the custom
+			// component (icon + label + close button) in some L&F.
+			// BorderLayout handles the CENTER label truncation automatically.
+			Component tabComp = tabbedPane.getTabComponentAt(index);
+			if (tabComp instanceof JPanel panelWithLabel) {
+				for (Component child : panelWithLabel.getComponents()) {
+					if (child instanceof JLabel label && label.getIcon() == null) {
+						label.setText(title);
+						label.setToolTipText(title);
+						break;
+					}
+				}
+			}
+		}
+	}
+
+	private void removeFromMap(BrowserPanel panel) {
+		urlToPanel.entrySet().removeIf(entry -> entry.getValue() == panel);
+	}
+
+	/**
+	 * Normalises a URL for use as a map key. Strips trailing slashes to treat {@code "http://foo/"} and {@code "http://foo"} as the same.
+	 */
+	private static String normaliseUrl(String url) {
+		if (url == null) {
+			return "";
+		}
+		String key = url.trim();
+		// Strip trailing slash (but keep "about:blank" as-is)
+		if (key.endsWith("/") && !key.equals("about:blank/")) {
+			key = key.substring(0, key.length() - 1);
+		}
+		return key;
+	}
 }

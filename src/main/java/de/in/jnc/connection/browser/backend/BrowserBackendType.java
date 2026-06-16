@@ -3,13 +3,12 @@ package de.in.jnc.connection.browser.backend;
 /**
  * Enumeration of supported browser backends.
  * <p>
- * Each value identifies a concrete implementation of {@link BrowserBackend}.
+ * Currently only JCEF (Java Chromium Embedded Framework) is supported.
+ * The enum is kept as a single-value placeholder for potential future
+ * alternative browser engines.
  */
 public enum BrowserBackendType {
 
-    /** JavaFX WebView — default backend, uses JFXPanel + WebEngine. */
-    JAVAFX_WEBVIEW,
-
-    /** JCEF (Java Chromium Embedded Framework) — optional backend. */
+    /** JCEF (Java Chromium Embedded Framework) — the only supported backend. */
     JCEF
 }

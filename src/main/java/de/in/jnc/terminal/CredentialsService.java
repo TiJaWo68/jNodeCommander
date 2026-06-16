@@ -8,6 +8,9 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.KeyboardFocusManager;
+import java.awt.Toolkit;
+import java.awt.datatransfer.Clipboard;
+import java.awt.datatransfer.StringSelection;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.IOException;
@@ -236,6 +239,19 @@ public class CredentialsService {
             gbc.weightx = WEIGHT_NAME_COLUMN;
             JLabel nameLabel = new JLabel(name);
             nameLabel.setFont(nameLabel.getFont().deriveFont(Font.BOLD));
+            nameLabel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            nameLabel.setToolTipText("Click to copy " + cred.username()
+                    + ":" + maskPassword(cred.password()) + " to clipboard");
+            nameLabel.addMouseListener(new MouseAdapter() {
+                @Override
+                public void mouseClicked(MouseEvent e) {
+                    String combo = cred.username() + ":" + cred.password();
+                    Clipboard clip = Toolkit.getDefaultToolkit()
+                            .getSystemClipboard();
+                    clip.setContents(new StringSelection(combo), null);
+                    dialog.dispose();
+                }
+            });
             panel.add(nameLabel, gbc);
 
             gbc.gridx = 1;

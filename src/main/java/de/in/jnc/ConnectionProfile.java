@@ -1,8 +1,12 @@
 package de.in.jnc;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
+import de.in.jnc.connection.browser.Bookmark;
+import de.in.jnc.connection.browser.HistoryEntry;
 import de.in.jnc.terminal.TerminalSettings;
 
 /**
@@ -36,6 +40,24 @@ public class ConnectionProfile {
 
 	/** Last window height, or -1 if not set. */
 	private int windowHeight = -1;
+
+	/**
+	 * Whether to restore previously open browser tabs on reconnect.
+	 * Default is {@code true}. Can be toggled in profile settings.
+	 */
+	private boolean restoreTabs = true;
+
+	/**
+	 * URLs of browser tabs that were open when the connection was last closed.
+	 * Only used when {@link #restoreTabs} is {@code true}.
+	 */
+	private List<String> savedTabUrls = new ArrayList<>();
+
+	/** Saved browser bookmarks (per profile). */
+	private List<Bookmark> bookmarks = new ArrayList<>();
+
+	/** Browser history entries (per profile). */
+	private List<HistoryEntry> history = new ArrayList<>();
 
 	/**
 	 * Optional per-profile terminal settings override.
@@ -244,6 +266,58 @@ public class ConnectionProfile {
 	 */
 	public void setWindowHeight(int windowHeight) {
 		this.windowHeight = windowHeight;
+	}
+
+	/**
+	 * Returns whether browser tabs should be restored on reconnect.
+	 *
+	 * @return true if tab restore is enabled
+	 */
+	public boolean isRestoreTabs() {
+		return restoreTabs;
+	}
+
+	/**
+	 * Enables or disables browser tab restore on reconnect.
+	 *
+	 * @param restoreTabs true to enable, false to disable
+	 */
+	public void setRestoreTabs(boolean restoreTabs) {
+		this.restoreTabs = restoreTabs;
+	}
+
+	/**
+	 * Returns the list of saved browser tab URLs from the last session.
+	 *
+	 * @return the saved tab URLs, or an empty list
+	 */
+	public List<String> getSavedTabUrls() {
+		return savedTabUrls;
+	}
+
+	/**
+	 * Sets the list of browser tab URLs to restore on the next connection.
+	 *
+	 * @param savedTabUrls the URLs to restore
+	 */
+	public void setSavedTabUrls(List<String> savedTabUrls) {
+		this.savedTabUrls = savedTabUrls != null ? savedTabUrls : new ArrayList<>();
+	}
+
+	public List<Bookmark> getBookmarks() {
+		return bookmarks;
+	}
+
+	public void setBookmarks(List<Bookmark> bookmarks) {
+		this.bookmarks = bookmarks != null ? bookmarks : new ArrayList<>();
+	}
+
+	public List<HistoryEntry> getHistory() {
+		return history;
+	}
+
+	public void setHistory(List<HistoryEntry> history) {
+		this.history = history != null ? history : new ArrayList<>();
 	}
 
 	public TerminalSettings resolveTerminalSettings() {

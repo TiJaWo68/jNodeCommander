@@ -17,17 +17,11 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import de.in.jnc.connection.browser.backend.BrowserBackend;
-import de.in.jnc.connection.browser.backend.BrowserBackendType;
-import de.in.jnc.connection.browser.backend.JavaFXWebViewBackend;
 import de.in.jnc.connection.browser.backend.jcef.JCEFBackend;
 
 /**
- * A Swing {@link JPanel} that embeds a browser engine via a
- * {@link BrowserBackend} delegate with a compact URL navigation toolbar.
- * <p>
- * Currently the default backend is JavaFX WebView. In the future, JCEF will
- * be available as an alternative, switchable at runtime via
- * {@link #switchBackend(BrowserBackendType)}.
+ * A Swing {@link JPanel} that embeds a JCEF (Chromium) browser engine
+ * with a compact URL navigation toolbar.
  * <p>
  * <b>Multi-tab isolation:</b> Each panel creates its own backend instance,
  * so listeners, cookies, and session state are fully isolated between tabs.
@@ -99,7 +93,6 @@ public class BrowserPanel extends JPanel {
     // ── Backend ─────────────────────────────────────────────────────────
 
     private BrowserBackend backend;
-    private BrowserBackendType backendType;
 
     // ── Toolbar components ──────────────────────────────────────────────
 
@@ -120,6 +113,12 @@ public class BrowserPanel extends JPanel {
      */
     private Consumer<Consumer<String>> credentialsCallback;
 
+    /** Callback invoked on Ctrl+D to add current URL as bookmark. */
+    private Runnable bookmarkCallback;
+
+    /** Callback invoked when a new URL is loaded (for history tracking). */
+    private Consumer<String> historyCallback;
+
     /**
      * Callback invoked when the browser requests to open a new tab (popup).
      */
@@ -137,29 +136,13 @@ public class BrowserPanel extends JPanel {
     }
 
     /**
-     * Creates a new browser panel with the default backend (JCEF / Chromium)
+     * Creates a new browser panel with the JCEF (Chromium) backend
      * and loads the given URL.
-     * <p>
-     * JCEF is the default because it provides a modern Chromium engine that
-     * can render complex SPAs like the Keycloak Admin Console, which JavaFX
-     * WebView (WebKit ~615.1) cannot.
      *
      * @param url the initial URL to load (may be {@code "about:blank"})
      */
     public BrowserPanel(String url) {
-        this(url, BrowserBackendType.JCEF);
-    }
-
-    /**
-     * Creates a new browser panel with the specified backend type.
-     *
-     * @param url  the initial URL to load
-     * @param type the backend type to use
-     */
-    public BrowserPanel(String url, BrowserBackendType type) {
         super(new BorderLayout());
-
-        this.backendType = type;
 
         // ── Navigation toolbar (constructed on EDT) ────────────────────
         JToolBar toolbar = new JToolBar();
@@ -186,7 +169,7 @@ public class BrowserPanel extends JPanel {
         add(toolbar, BorderLayout.NORTH);
 
         // ── Create backend ─────────────────────────────────────────────
-        this.backend = createBackend(type, url);
+        this.backend = new JCEFBackend(url);
         add(backend.getViewComponent(), BorderLayout.CENTER);
 
         // ── Focus: prevent CEF from grabbing focus on creation ────────
@@ -202,6 +185,18 @@ public class BrowserPanel extends JPanel {
         backBtn.addActionListener(e -> backend.goBack());
         forwardBtn.addActionListener(e -> backend.goForward());
         refreshBtn.addActionListener(e -> backend.reload());
+
+        // ── Ctrl+D → bookmark current URL ─────────────────────────────
+        urlField.addKeyListener(new java.awt.event.KeyAdapter() {
+            @Override
+            public void keyPressed(java.awt.event.KeyEvent e) {
+                if (e.isControlDown() && e.getKeyCode() == java.awt.event.KeyEvent.VK_D) {
+                    if (bookmarkCallback != null) {
+                        bookmarkCallback.run();
+                    }
+                }
+            }
+        });
 
         urlField.addActionListener(e -> {
             String input = urlField.getText().trim();
@@ -257,54 +252,14 @@ public class BrowserPanel extends JPanel {
                 });
     }
 
-    /**
-     * Creates a backend instance for the given type.
-     */
-    private static BrowserBackend createBackend(BrowserBackendType type, String url) {
-        return switch (type) {
-            case JAVAFX_WEBVIEW -> new JavaFXWebViewBackend(url);
-            case JCEF -> new JCEFBackend(url);
-        };
-    }
-
-    /**
-     * Switches the browser backend at runtime.
-     * <p>
-     * The current backend is disposed and replaced with a new one of the
-     * given type, which then loads the currently displayed URL.
-     *
-     * @param newType the backend type to switch to
-     */
-    public void switchBackend(BrowserBackendType newType) {
-        if (newType == this.backendType) {
-            return;
-        }
-
-        String currentUrl = urlField.getText();
-
-        // Dispose old backend
-        backend.setLocationListener(null);
-        backend.setTitleListener(null);
-        remove(backend.getViewComponent());
-        backend.dispose();
-
-        // Create and add new backend
-        this.backendType = newType;
-        this.backend = createBackend(newType, currentUrl);
-        add(backend.getViewComponent(), BorderLayout.CENTER);
-
-        // Wire callbacks
-        backend.setLocationListener(this::onLocationChanged);
-        backend.setTitleListener(this::onTitleChanged);
-
-        revalidate();
-        repaint();
-    }
-
     // ── Internal callback handlers ──────────────────────────────────────
 
     private void onLocationChanged(String newUrl) {
         SwingUtilities.invokeLater(() -> urlField.setText(newUrl));
+        if (historyCallback != null && newUrl != null
+                && !newUrl.isEmpty() && !"about:blank".equals(newUrl)) {
+            historyCallback.accept(newUrl);
+        }
     }
 
     private void onTitleChanged(String newTitle) {
@@ -347,10 +302,37 @@ public class BrowserPanel extends JPanel {
     }
 
     /**
-     * Returns the current backend type.
+     * Registers a callback for Ctrl+D bookmark shortcut.
      */
-    public BrowserBackendType getBackendType() {
-        return backendType;
+    public void setBookmarkCallback(Runnable callback) {
+        this.bookmarkCallback = callback;
+    }
+
+    /**
+     * Registers a callback for URL history tracking.
+     */
+    public void setHistoryCallback(Consumer<String> callback) {
+        this.historyCallback = callback;
+    }
+
+    /**
+     * Requests keyboard focus on the URL address bar.
+     * <p>
+     * In JCEF windowed mode, the native Canvas must first release its
+     * keyboard hook via {@code backend.releaseFocus()} before any Swing
+     * text component can receive keystrokes.
+     */
+    /**
+     * Returns the URL currently displayed in the address bar.
+     */
+    public String getCurrentUrl() {
+        return urlField.getText();
+    }
+
+    public void requestUrlBarFocus() {
+        backend.releaseFocus();
+        urlField.requestFocusInWindow();
+        urlField.selectAll();
     }
 
     /**

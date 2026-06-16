@@ -35,6 +35,10 @@ public class ProfileManager {
 		PROFILES_FILE = f;
 	}
 
+	static void resetInstance() {
+		instance = null;
+	}
+
 	private ProfileManager() {
 		loadProfiles();
 		String prefMode = Preferences.userNodeForPackage(ProfileManager.class).get("sortMode", "MANUAL");
@@ -111,21 +115,46 @@ public class ProfileManager {
 			return;
 		}
 		try {
-			List<ConnectionProfile> loaded = MAPPER.readValue(PROFILES_FILE, new TypeReference<List<ConnectionProfile>>() {});
+			List<ConnectionProfile> loaded = MAPPER.readValue(PROFILES_FILE,
+					new TypeReference<List<ConnectionProfile>>() {});
+			// Only replace on success — prevents accidental data loss
+			// when a corrupted file is overwritten by an empty list on the next save.
 			profiles.clear();
 			profiles.addAll(loaded);
-			LOGGER.info("Loaded {} profiles from {}", profiles.size(), PROFILES_FILE.getAbsolutePath());
+			LOGGER.info("Loaded {} profiles from {}", profiles.size(),
+					PROFILES_FILE.getAbsolutePath());
 		} catch (IOException e) {
-			LOGGER.error("Failed to load profiles from " + PROFILES_FILE.getAbsolutePath(), e);
+			// Backup the corrupted file so data can potentially be recovered
+			File backup = new File(PROFILES_FILE.getAbsolutePath() + ".corrupted");
+			try {
+				java.nio.file.Files.copy(PROFILES_FILE.toPath(), backup.toPath(),
+						java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+				LOGGER.error("Failed to load profiles (backed up to {}): {}",
+						backup.getAbsolutePath(), e.getMessage());
+			} catch (IOException backupEx) {
+				LOGGER.error("Failed to load profiles and could not create backup: {}",
+						e.getMessage());
+			}
 		}
 	}
 
 	private void saveProfiles() {
+		// Write to temp file first, then replace target.
+		// On Windows, renameTo cannot overwrite existing files,
+		// so we delete the target first.
+		File tempFile = new File(PROFILES_FILE.getAbsolutePath() + ".tmp");
 		try {
-			MAPPER.writerWithDefaultPrettyPrinter().writeValue(PROFILES_FILE, profiles);
-			LOGGER.info("Saved {} profiles to {}", profiles.size(), PROFILES_FILE.getAbsolutePath());
+			MAPPER.writerWithDefaultPrettyPrinter().writeValue(tempFile, profiles);
+			PROFILES_FILE.delete();
+			if (!tempFile.renameTo(PROFILES_FILE)) {
+				java.nio.file.Files.move(tempFile.toPath(), PROFILES_FILE.toPath(),
+						java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+			}
+			LOGGER.info("Saved {} profiles to {}", profiles.size(),
+					PROFILES_FILE.getAbsolutePath());
 		} catch (IOException e) {
 			LOGGER.error("Failed to save profiles to " + PROFILES_FILE.getAbsolutePath(), e);
+			tempFile.delete();
 		}
 	}
 }

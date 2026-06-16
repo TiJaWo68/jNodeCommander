@@ -354,6 +354,14 @@ public class FileTransferPanel extends JPanel {
         }
     }
 
+    /**
+     * Requests initial keyboard focus on the local file table
+     * (called when this tab is first selected).
+     */
+    public void requestInitialFocus() {
+        localPanel.getFileTable().requestFocusInWindow();
+    }
+
     // ─── Keyboard shortcuts ──────────────────────────────────────────────
 
     private void registerKeyboardShortcuts() {

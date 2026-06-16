@@ -16,9 +16,7 @@ import javax.swing.JComponent;
  *       — uses JavaFX WebView (the current default)</li>
  *   <li>{@code JCEFBackend} — uses JCEF (Java Chromium Embedded Framework)</li>
  * </ul>
- * A {@link de.in.jnc.connection.browser.BrowserPanel} owns one backend instance
- * and can switch to another at runtime via
- * {@code switchBackend(BrowserBackendType)}.
+ * A {@link de.in.jnc.connection.browser.BrowserPanel} owns one backend instance.
  */
 public interface BrowserBackend {
 

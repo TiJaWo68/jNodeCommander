@@ -467,7 +467,10 @@ public class JCEFBackend implements BrowserBackend {
 		}
 		// Save the currently focused element before showing the dialog
 		browser.executeJavaScript(JS_SAVE_ACTIVE_ELEMENT, "", 0);
-		credentialsCallback.accept(this::insertValueIntoActiveElement);
+		// Dispatch to EDT: the credentials callback opens a Swing dialog,
+		// which must be constructed on the Event Dispatch Thread.
+		SwingUtilities.invokeLater(
+				() -> credentialsCallback.accept(this::insertValueIntoActiveElement));
 	}
 
 	/**

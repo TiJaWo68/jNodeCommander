@@ -2,13 +2,17 @@ package de.in.jnc.connection;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.GraphicsDevice;
 import java.awt.GraphicsEnvironment;
+import java.awt.KeyEventDispatcher;
+import java.awt.KeyboardFocusManager;
 import java.awt.Rectangle;
 import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 import javax.swing.JButton;
@@ -20,6 +24,12 @@ import javax.swing.JPopupMenu;
 import javax.swing.JTabbedPane;
 import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
+
+import de.in.jnc.connection.browser.Bookmark;
+import de.in.jnc.connection.browser.BrowserMenu;
+import de.in.jnc.connection.browser.BrowserPanel;
+import de.in.jnc.connection.browser.HistoryEntry;
+import de.in.jnc.connection.browser.HistoryPanel;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -84,7 +94,8 @@ public class ConnectionFrame extends JFrame {
 	private final PortForwardManager portForwardManager;
 	private final EndpointPopupMenu endpointPopupMenu;
 	private final CredentialsService credentialsService;
-	private JButton webAppsBtn;
+	private final BrowserMenu browserMenu;
+	private JButton browserMenuBtn;
 
 	/**
 	 * Creates a new ConnectionFrame with the given SSH connection.
@@ -183,17 +194,50 @@ public class ConnectionFrame extends JFrame {
 		browserTabManager = new BrowserTabManager(tabbedPane);
 		browserTabManager.setCredentialsCallback(valueInserter -> credentialsService.showCredentialsDialog(this, valueInserter));
 
+		// ── Bookmark callback (Ctrl+D) ────────────────────────────────────
+		browserTabManager.setBookmarkCallback(() -> {
+			if (profile == null) return;
+			String currentUrl = getCurrentBrowserUrl();
+			if (currentUrl == null || currentUrl.isEmpty() || "about:blank".equals(currentUrl)) return;
+			Bookmark bm = new Bookmark(currentUrl, currentUrl, null);
+			List<Bookmark> list = profile.getBookmarks();
+			if (!list.contains(bm)) {
+				list.add(bm);
+				persistProfile();
+				LOGGER.info("Bookmark added: {} (total: {})", bm.getUrl(), list.size());
+			}
+		});
+
+		// ── History callback ──────────────────────────────────────────────
+		browserTabManager.setHistoryCallback(url -> {
+			if (profile == null) return;
+			String baseUrl = stripQueryParams(url);
+			List<HistoryEntry> hist = profile.getHistory();
+			boolean exists = hist.stream()
+					.anyMatch(e -> stripQueryParams(e.getUrl()).equals(baseUrl));
+			if (!exists) {
+				hist.add(new HistoryEntry(url, baseUrl));
+				persistProfile();
+			}
+		});
+
 		// ── Web Apps Discovery (Story 3.3.2) ─────────────────────────────
 		endpointDiscoverer = new K8sEndpointDiscoverer(sshConnection);
 		portForwardManager = new PortForwardManager(sshConnection);
 		endpointPopupMenu = new EndpointPopupMenu();
 
+		// ── Browser Menu (Story 6.3) ──────────────────────────────────────
+		browserMenu = new BrowserMenu(this);
+
 		// ── Leading/Trailing components in tab strip (browser-style) ─────
-		FlatSVGIcon webAppsIcon = new FlatSVGIcon("web_apps_menu.svg", 16, 16);
-		webAppsBtn = new JButton(webAppsIcon);
-		webAppsBtn.setToolTipText("Discover and open Kubernetes web services");
-		webAppsBtn.addActionListener(e -> showEndpointPopup());
-		tabbedPane.putClientProperty("JTabbedPane.leadingComponent", webAppsBtn);
+		FlatSVGIcon browserMenuIcon = new FlatSVGIcon("web_apps_menu.svg", 16, 16);
+		browserMenuBtn = new JButton(browserMenuIcon);
+		browserMenuBtn.setToolTipText("Browser menu (Bookmarks, History, Tabs, Endpoints)");
+		browserMenuBtn.addActionListener(e -> {
+			browserMenu.rebuild();
+			browserMenu.show(browserMenuBtn, 0, browserMenuBtn.getHeight());
+		});
+		tabbedPane.putClientProperty("JTabbedPane.leadingComponent", browserMenuBtn);
 
 		JButton addTabBtn = new JButton("+");
 		addTabBtn.setForeground(new Color(0xFF, 0xB7, 0x4D));
@@ -203,6 +247,55 @@ public class ConnectionFrame extends JFrame {
 
 		add(tabbedPane, BorderLayout.CENTER);
 
+		// ── Tab-switch auto-focus (Story 6.7) ──────────────────────────
+		tabbedPane.addChangeListener(e -> {
+			int idx = tabbedPane.getSelectedIndex();
+			if (idx < 0) return;
+			Component comp = tabbedPane.getComponentAt(idx);
+			SwingUtilities.invokeLater(() -> {
+				if (idx == 0) {
+					// Terminal: focus JediTerm
+					terminalWidget.getTerminalPanel().requestFocusInWindow();
+				} else if (idx == 1) {
+					// File Transfer: focus local panel
+					fileTransferPanel.requestInitialFocus();
+				} else if (comp instanceof BrowserPanel bp) {
+					// Browser tab: focus URL bar
+					bp.requestUrlBarFocus();
+				} else if (comp instanceof HistoryPanel hp) {
+					// History tab: refresh data
+					hp.refresh();
+				}
+			});
+		});
+
+		// ── Global keyboard shortcuts (Story 6.4) ──────────────────────
+		KeyEventDispatcher keyDispatcher = e -> {
+			if (e.getID() != KeyEvent.KEY_PRESSED || !e.isAltDown()) {
+				return false;
+			}
+			switch (e.getKeyCode()) {
+				case KeyEvent.VK_C:
+					tabbedPane.setSelectedIndex(0);
+					return true;
+				case KeyEvent.VK_N:
+					tabbedPane.setSelectedIndex(1);
+					return true;
+				case KeyEvent.VK_1: case KeyEvent.VK_2: case KeyEvent.VK_3:
+				case KeyEvent.VK_4: case KeyEvent.VK_5: case KeyEvent.VK_6:
+				case KeyEvent.VK_7: case KeyEvent.VK_8: case KeyEvent.VK_9:
+					int browserIdx = 2 + (e.getKeyCode() - KeyEvent.VK_1);
+					if (browserIdx < tabbedPane.getTabCount()) {
+						tabbedPane.setSelectedIndex(browserIdx);
+					}
+					return true;
+				default:
+					return false;
+			}
+		};
+		KeyboardFocusManager.getCurrentKeyboardFocusManager()
+				.addKeyEventDispatcher(keyDispatcher);
+
 		// Clean up on window close
 		addWindowListener(new WindowAdapter() {
 			@Override
@@ -210,6 +303,20 @@ public class ConnectionFrame extends JFrame {
 				closeConnection();
 			}
 		});
+
+		// ── Session restore: re-open tabs from last session (Story 6.5) ──
+		if (profile != null && profile.isRestoreTabs()
+				&& !profile.getSavedTabUrls().isEmpty()) {
+			List<String> urls = new ArrayList<>(profile.getSavedTabUrls());
+			profile.setSavedTabUrls(new ArrayList<>()); // clear after restore
+			SwingUtilities.invokeLater(() -> {
+				for (String url : urls) {
+					if (url != null && !url.isEmpty() && !"about:blank".equals(url)) {
+						openBrowserUrl(url, url);
+					}
+				}
+			});
+		}
 	}
 
 	/**
@@ -229,11 +336,14 @@ public class ConnectionFrame extends JFrame {
 		// Stop all port-forward tunnels (Story 3.3.2)
 		portForwardManager.stopAll();
 
-		// Close all browser tabs and release JFX resources
-		browserTabManager.closeAll();
-
 		// Save current state into the profile before closing
 		if (profile != null) {
+			// Save open tab URLs for session restore (Story 6.5)
+			if (profile.isRestoreTabs()) {
+				profile.setSavedTabUrls(browserTabManager.getOpenUrls());
+			} else {
+				profile.setSavedTabUrls(new java.util.ArrayList<>());
+			}
 			// Save file transfer directories
 			fileTransferPanel.saveDirectoriesToProfile();
 			// Save window bounds
@@ -241,9 +351,12 @@ public class ConnectionFrame extends JFrame {
 			profile.setWindowY(getY());
 			profile.setWindowWidth(getWidth());
 			profile.setWindowHeight(getHeight());
-			ProfileManager.getInstance().addOrUpdateProfile(profile);
-			LOGGER.debug("Persisted window bounds and file transfer directories to profile '{}'", profile.getName());
+			persistProfile();
+			LOGGER.debug("Persisted session state to profile '{}'", profile.getName());
 		}
+
+		// Close all browser tabs after saving URLs
+		browserTabManager.closeAll();
 
 		try {
 			terminalWidget.close();
@@ -294,6 +407,28 @@ public class ConnectionFrame extends JFrame {
 	/**
 	 * Opens a fresh empty browser tab.
 	 */
+	/**
+	 * Opens a Swing panel as a closable tab (e.g. History).
+	 */
+	public void openPanelTab(String title, JPanel panel) {
+		tabbedPane.addTab(title, panel);
+		tabbedPane.setSelectedIndex(tabbedPane.getTabCount() - 1);
+	}
+
+	/**
+	 * Selects an existing panel tab with the given title.
+	 * @return true if an existing tab was found and selected
+	 */
+	public boolean selectExistingPanelTab(String title) {
+		for (int i = 0; i < tabbedPane.getTabCount(); i++) {
+			if (title.equals(tabbedPane.getTitleAt(i))) {
+				tabbedPane.setSelectedIndex(i);
+				return true;
+			}
+		}
+		return false;
+	}
+
 	public void openNewBrowserTab() {
 		browserTabManager.openNewTab();
 	}
@@ -315,13 +450,13 @@ public class ConnectionFrame extends JFrame {
 
 			endpointPopupMenu.rebuild(endpoints, groupByNs, this::openNewBrowserTab, this::onEndpointClick, this::onToggleView,
 					() -> SwingUtilities.invokeLater(this::showEndpointPopup));
-			endpointPopupMenu.show(webAppsBtn, 0, webAppsBtn.getHeight());
+			endpointPopupMenu.show(browserMenuBtn, 0, browserMenuBtn.getHeight());
 		} catch (IOException e) {
 			LOGGER.error("Failed to discover Kubernetes endpoints", e);
 			// Show an error popup as fallback
 			endpointPopupMenu.removeAll();
 			endpointPopupMenu.add("❌  Discovery failed: " + e.getMessage());
-			endpointPopupMenu.show(webAppsBtn, 0, webAppsBtn.getHeight());
+			endpointPopupMenu.show(browserMenuBtn, 0, browserMenuBtn.getHeight());
 		}
 	}
 
@@ -366,7 +501,7 @@ public class ConnectionFrame extends JFrame {
 				List<Endpoint> endpoints = endpointDiscoverer.discover();
 				endpointPopupMenu.rebuild(endpoints, groupByNs, this::openNewBrowserTab, this::onEndpointClick, this::onToggleView,
 						() -> SwingUtilities.invokeLater(this::showEndpointPopup));
-				endpointPopupMenu.show(webAppsBtn, 0, webAppsBtn.getHeight());
+				endpointPopupMenu.show(browserMenuBtn, 0, browserMenuBtn.getHeight());
 			} catch (IOException e) {
 				LOGGER.error("Failed to re-discover endpoints after view toggle", e);
 			}
@@ -468,4 +603,60 @@ public class ConnectionFrame extends JFrame {
 	public JTabbedPane getTabbedPane() {
 		return tabbedPane;
 	}
+
+	/**
+	 * Returns the URL of the currently selected browser tab, or null.
+	 */
+	/** Strips query parameters and fragment from a URL. */
+	/** Persists the current profile to disk (bookmarks, history, etc.). */
+	private void persistProfile() {
+		if (profile != null) {
+			ProfileManager.getInstance().addOrUpdateProfile(profile);
+			LOGGER.debug("Profile persisted: {} bookmarks, {} history entries",
+					profile.getBookmarks().size(), profile.getHistory().size());
+		}
+	}
+
+	private static String stripQueryParams(String url) {
+		if (url == null) return "";
+		int q = url.indexOf('?');
+		int h = url.indexOf('#');
+		int end = url.length();
+		if (q >= 0) end = Math.min(end, q);
+		if (h >= 0) end = Math.min(end, h);
+		return url.substring(0, end);
+	}
+
+	private String getCurrentBrowserUrl() {
+		int idx = tabbedPane.getSelectedIndex();
+		if (idx < 2) return null;
+		Component comp = tabbedPane.getComponentAt(idx);
+		if (comp instanceof BrowserPanel bp) {
+			return bp.getCurrentUrl();
+		}
+		return null;
+	}
+
+	/**
+	 * Returns the connection profile, or {@code null} for quick-connect sessions.
+	 */
+	public ConnectionProfile getProfile() {
+		return profile;
+	}
+
+	/**
+	 * Triggers Kubernetes endpoint discovery and shows the popup menu.
+	 * Called from {@link de.in.jnc.connection.browser.BrowserMenu}.
+	 */
+	public void clearHistory() {
+		if (profile != null) {
+			profile.getHistory().clear();
+			ProfileManager.getInstance().addOrUpdateProfile(profile);
+		}
+	}
+
+	public void showEndpointDiscovery() {
+		showEndpointPopup();
+	}
 }
+
