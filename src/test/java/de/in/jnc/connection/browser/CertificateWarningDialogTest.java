@@ -2,12 +2,14 @@ package de.in.jnc.connection.browser;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.awt.GraphicsEnvironment;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.swing.JDialog;
 import javax.swing.SwingUtilities;
 
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -31,6 +33,8 @@ class CertificateWarningDialogTest {
      */
     @Test
     void dialogHeight_isClampedAfterPack() throws Exception {
+        Assumptions.assumeFalse(GraphicsEnvironment.isHeadless());
+
         AtomicBoolean result = new AtomicBoolean(false);
         CountDownLatch latch = new CountDownLatch(1);
 
