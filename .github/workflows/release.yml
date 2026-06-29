@@ -46,13 +46,13 @@ jobs:
     - name: Package Native Executable with jpackage (Windows)
       if: runner.os == 'Windows'
       run: |
-        jpackage --type app-image --name jNodeCommander --input target/jpackage-input --main-jar jnc-0.0.1.jar --main-class de.in.jnc.App --dest target/jpackage-dest
+        jpackage --type app-image --name jNodeCommander --input target/jpackage-input --main-jar jnc.jar --main-class de.in.jnc.App --dest target/jpackage-dest
         Compress-Archive -Path target/jpackage-dest/jNodeCommander -DestinationPath target/jNodeCommander-Windows.zip
 
     - name: Package Native Executable with jpackage (Linux)
       if: runner.os == 'Linux'
       run: |
-        jpackage --type app-image --name jNodeCommander --input target/jpackage-input --main-jar jnc-0.0.1.jar --main-class de.in.jnc.App --dest target/jpackage-dest
+        jpackage --type app-image --name jNodeCommander --input target/jpackage-input --main-jar jnc.jar --main-class de.in.jnc.App --dest target/jpackage-dest
         cd target/jpackage-dest && tar -czf ../jNodeCommander-Linux.tar.gz jNodeCommander
 
     - name: Upload Release Assets (Windows)

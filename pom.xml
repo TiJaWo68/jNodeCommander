@@ -116,6 +116,7 @@
 		</dependency>
 	</dependencies>
 	<build>
+		<finalName>jnc</finalName>
 		<plugins>
 			<plugin>
 				<artifactId>maven-compiler-plugin</artifactId>
