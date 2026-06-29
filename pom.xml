@@ -5,7 +5,7 @@
 
 	<groupId>de.in</groupId>
 	<artifactId>jnc</artifactId>
-	<version>0.0.1</version>
+	<version>0.1.0</version>
 	<name>jNodeCommander</name>
 	<description>Automated SSH and Web-Login Bridge for K8s Nodes</description>
 
@@ -132,6 +132,39 @@
 				<configuration>
 					<jvm>C:\Program Files\Eclipse Adoptium\jdk-21.0.9.10-hotspot\bin\java</jvm>
 					<argLine>-Dcom.sun.webkit.useJVMSSLSocket=true</argLine>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-dependency-plugin</artifactId>
+				<version>3.6.1</version>
+				<executions>
+					<execution>
+						<id>copy-dependencies</id>
+						<phase>package</phase>
+						<goals>
+							<goal>copy-dependencies</goal>
+						</goals>
+						<configuration>
+							<outputDirectory>${project.build.directory}/jpackage-input/libs</outputDirectory>
+							<includeScope>runtime</includeScope>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-jar-plugin</artifactId>
+				<version>3.4.1</version>
+				<configuration>
+					<outputDirectory>${project.build.directory}/jpackage-input</outputDirectory>
+					<archive>
+						<manifest>
+							<mainClass>de.in.jnc.App</mainClass>
+							<addClasspath>true</addClasspath>
+							<classpathPrefix>libs/</classpathPrefix>
+						</manifest>
+					</archive>
 				</configuration>
 			</plugin>
 			<plugin>
