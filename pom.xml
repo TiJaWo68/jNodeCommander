@@ -24,7 +24,7 @@
 		<dependency>
 			<groupId>com.formdev</groupId>
 			<artifactId>flatlaf-extras</artifactId>
-			<version>3.7.1</version>
+			<version>3.7.2</version>
 		</dependency>
 		<!-- Cuberact Swing Layout (Epic 2) -->
 		<dependency>
